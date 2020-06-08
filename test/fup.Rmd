@@ -1,0 +1,34 @@
+---
+title: "EDA - Follow Up"
+author: "Calum Nicholson"
+date: "27/02/2020"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = 'Z:/CURRENT_STUDIES/2020_achd_map')
+knitr::opts_knit$set(root.dir = 'C:/Users/Calum Nicholson/Documents/data')
+
+getwd()
+
+```
+
+```{r}
+getwd()
+
+
+```
+
+``` {r}
+fup <- read.csv('./Table_exports/FOLLOW-UP STATUS.csv')
+```
+
+```{r}
+length(unique(fup$person_id))
+names(fup)
+
+class(fup$person_id)
+
+one <- fup[fup$person_id == 1,]
+```
