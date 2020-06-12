@@ -1,0 +1,65 @@
+---
+title: "Table Builder EDA"
+author: "Calum Nicholson"
+date: "08/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# set 'data' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+```
+
+``` {r}
+# Function to import and clean SA2 Tables
+read.SA2.table <-function (filename, path = "./Table_builder_SA2_NSW/") {
+  
+#    '''
+#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #areas, and converts it to a dataframe
+#    
+#    INPUT
+#    filename:       string, name of the file with extension
+#    path:           string, path to the file
+#    
+#    OUTPUT
+#    sa2.df:         dataframe, Table builder data with excess removed
+#    ```
+  
+    #load table
+    age <- readLines(paste(path,filename, sep=''))
+    
+    #tidy the data
+    age <- age[-(1:9)] #remove header
+    age <- age[-2] #remove SA2 label
+    age <- age[-(581:588)] #remove footer
+    
+    #load data into dataframe
+    sa2.df <- read.table(text = age, sep =",", header = TRUE, stringsAsFactors = FALSE)
+    sa2.df
+}
+
+# age
+read.SA2.table('age_10P.csv')
+
+```
+
+
+``` {r}
+
+# load some tables
+sex <- read.SA2.table('sex.csv')
+COB <- read.SA2.table('COB.csv')
+
+# Percentages in each area
+sa2_male <- ( sex$Male / sex$Total ) * 100
+sa2_female <- ( sex$Female / sex$Total ) * 100
+sa2_overseas <- ( COB$COB_overseas / COB$Total ) * 100
+
+```
+
+
+
+
+
+
