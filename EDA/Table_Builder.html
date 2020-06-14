@@ -370,7 +370,8 @@ summary {
 </div>
 
 
-<p><strong>Function For importing Table Builder data</strong></p>
+<div id="function-for-importing-table-builder-data" class="section level2">
+<h2>Function For importing Table Builder data</h2>
 <p>Table Builder data was downloaded on 5 Jun 2020. The data is located in Dissertation/data/Table_builder_SA2_NSW.</p>
 <p>Each table row in this folder is an SA2 area for NSW, with the columns describing a certain demographic. This function will import the data and remove the unneccesary rows.</p>
 <pre class="r"><code># Function to import and clean SA2 Tables
@@ -423,9 +424,11 @@ head(read.SA2.table('age_10P.csv'))</code></pre>
 ## 4          105           17                   0  4785 NA
 ## 5          177           25                   0 16945 NA
 ## 6          134           21                   0 12642 NA</code></pre>
-<p><strong>Creating Area level variables</strong></p>
+</div>
+<div id="creating-area-level-variables" class="section level2">
+<h2>Creating Area level variables</h2>
 <p>Going though each of the tables, adding variables into a final dataset, sa2.data.</p>
-<p><em>total population, sex and country of birth</em></p>
+<p><strong>total population, sex and country of birth</strong></p>
 <pre class="r"><code># load some tables
 sex &lt;- read.SA2.table('sex.csv')
 COB &lt;- read.SA2.table('COB.csv')
@@ -451,31 +454,42 @@ head(sa2.data)</code></pre>
 ## 4               Queanbeyan - East      4785 51.43156 48.56844 31.24347
 ## 5               Queanbeyan Region     16945 50.87046 49.18265 23.04515
 ## 6 Queanbeyan West - Jerrabomberra     12642 49.77061 50.22939 20.02848</code></pre>
-<p><em>childcare</em></p>
-<pre class="r"><code>childcare_cat &lt;- read.SA2.table('child_care.csv')
+<p><strong>childcare</strong></p>
+<pre class="r"><code># load data
+childcare_cat &lt;- read.SA2.table('child_care.csv')
 
+# percentage of population engaged in childcare
 childcare &lt;-  childcare_cat %&gt;%
                 mutate(sum = rowSums(.[3:5])) %&gt;%
                 mutate(perc = sum / Total * 100) %&gt;%
                 select(CHCAREP.Unpaid.Child.Care, perc)
 
+# update column names
 names(childcare) &lt;- c('sa2_area','childcare')
 
+# add to data set
 sa2.data &lt;- merge(sa2.data, childcare, by = 'sa2_area')</code></pre>
-<p><em>employment</em></p>
-<pre class="r"><code>employ_cat &lt;- read.SA2.table('employment_status.csv')
+<p><strong>employment</strong></p>
+<pre class="r"><code># load data
+employ_cat &lt;- read.SA2.table('employment_status.csv')
 
+# percentage of unemployed in each area
 employ &lt;- employ_cat %&gt;%
               mutate(sum = rowSums(.[5:6])) %&gt;%
               mutate(perc = sum / Total * 100) %&gt;%
               select(LFSP.Labour.Force.Status, perc)
 
+# update column names
 names(employ) &lt;- c('sa2_area','employ')
 
+# add to data set
 sa2.data &lt;- merge(sa2.data, employ, by = 'sa2_area')</code></pre>
-<p><em>overcrowding</em></p>
-<pre class="r"><code>overcrowding_cat &lt;- read.SA2.table('overcrowding.csv')
+<p><strong>overcrowding</strong></p>
+<pre class="r"><code># load data
+overcrowding_cat &lt;- read.SA2.table('overcrowding.csv')
 
+# Overcrowding measured by number of spare rooms, or number of rooms needed in household
+# Percentage who have spare rooms (positive), and percentage who need more rooms (negative)
 overcrowding &lt;- overcrowding_cat %&gt;%
               mutate(positive = rowSums(.[7:10])) %&gt;%
               mutate(negative = rowSums(.[2:5])) %&gt;%
@@ -483,44 +497,60 @@ overcrowding &lt;- overcrowding_cat %&gt;%
               mutate(perc_neg = negative / Total * 100) %&gt;%
               select(HOSD.Housing.Suitability, perc_pos, perc_neg)
 
+# update column names
 names(overcrowding) &lt;- c('sa2_area','oc_positive', 'oc_negative')
 
+# add to data set
 sa2.data &lt;- merge(sa2.data, overcrowding, by = 'sa2_area')</code></pre>
-<p><em>single parents</em></p>
-<pre class="r"><code>single_parent_cat &lt;- read.SA2.table('single_parent.csv')
+<p><strong>single parents</strong></p>
+<pre class="r"><code># load data
+single_parent_cat &lt;- read.SA2.table('single_parent.csv')
 
-
-
+#Percentage of single parent households; male, female and total
 single_parent &lt;- single_parent_cat %&gt;%
               mutate(sp_male = Male.lone.parent / Total * 100) %&gt;%
               mutate(sp_female = Female.lone.parent / Total * 100) %&gt;%
               mutate(sp_total = sp_male + sp_female) %&gt;%  
               select(SLPP.Sex.of.Lone.Parent, sp_male, sp_female, sp_total)
 
+# update column names
 names(single_parent) &lt;- c('sa2_area','sp_male','sp_female','sp_total')
-sa2.data &lt;- merge(sa2.data, single_parent, by = 'sa2_area')</code></pre>
-<p><em>single parents</em></p>
-<pre class="r"><code>student_cat &lt;- read.SA2.table('student_status.csv')
 
+# add to data set
+sa2.data &lt;- merge(sa2.data, single_parent, by = 'sa2_area')</code></pre>
+<p><strong>students</strong></p>
+<pre class="r"><code># load data
+student_cat &lt;- read.SA2.table('student_status.csv')
+
+# percentage of students in each area
 student &lt;- student_cat %&gt;%
               mutate(student_sum = rowSums(.[3:4])) %&gt;%
               mutate(student_perc = student_sum / Total * 100) %&gt;% 
               select(STUP.Full.Time.Part.Time.Student.Status, student_perc)
 
+# update column names
 names(student) &lt;- c('sa2_area','student')
 
+# add to data set
 sa2.data &lt;- merge(sa2.data, student, by = 'sa2_area')</code></pre>
-<p><em>age</em></p>
-<pre class="r"><code>#add age groups for each area
+<p><strong>age</strong></p>
+<pre class="r"><code># load data
+#add age groups for each area
 age_cat &lt;- read.SA2.table('age_10P.csv')
 
-
+# age categories, in 10 year age groups.
 age_cat &lt;- select(age_cat, AGE10P...Age.in.Ten.Year.Groups:X100.years.and.over)
 
-names(age_cat) &lt;- c('sa2_area','age0','age10','age20','age30','age40','age50','age60','age70','age80','age90','age100')
+# update column names
+names(age_cat) &lt;- c('sa2_area','age0','age10',
+                    'age20','age30','age40',
+                    'age50','age60','age70',
+                    'age80','age90','age100')
 
+# add to data set
 sa2.data &lt;- merge(sa2.data, age_cat, by = 'sa2_area')</code></pre>
-<pre class="r"><code>knitr::kable(head(sa2.data))</code></pre>
+<pre class="r"><code># Final table
+knitr::kable(head(sa2.data))</code></pre>
 <table>
 <thead>
 <tr class="header">
@@ -709,6 +739,8 @@ sa2.data &lt;- merge(sa2.data, age_cat, by = 'sa2_area')</code></pre>
 </tr>
 </tbody>
 </table>
+<pre class="r"><code>#write.csv(sa2.data, &quot;./achd-dissertation/EDA/output/sa2_table_builder.csv&quot;)</code></pre>
+</div>
 
 
 

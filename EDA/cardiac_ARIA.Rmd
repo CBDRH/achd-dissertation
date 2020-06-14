@@ -1,0 +1,64 @@
+---
+title: "Cardiac ARIA"
+author: "Calum Nicholson"
+date: "13/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# set 'data' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+library(dplyr)
+library(xlsx)
+```
+
+## Import Cardiac ARIA
+
+``` {r}
+cARIA <- read.xlsx2('./cardiac_aria.xlsx', 1)
+```
+
+The dataset is split into two halfs, side by side, so this needs to be cleaned into a tidy format
+
+``` {r}
+head(cARIA)
+
+```
+
+## Cleaning
+
+```{r}
+#remove blank columns
+cARIA_2 <- cARIA %>%
+             select(-(5:6))
+
+#select the first 4 columns, first half of the data
+cARIA_left <-  cARIA_2 %>%
+                 select(1:4)
+
+#select the last 4 columns, second half of the data
+cARIA_right <- cARIA_2 %>%
+                 select(5:8)
+
+#Give both datasets the same columns names
+names(cARIA_right) <- names(cARIA_left)
+
+# Bind the two datasets together in the same columns
+cARIA_AUS <- rbind(cARIA_left, cARIA_right)
+
+# Filter for only NSW AREAs, sort aphabeitcally
+cARIA_NSW <- cARIA_AUS %>%
+                filter(State == "NSW") %>%
+                arrange(NAME) # not sure this is working
+
+# Check how many individual SA2 areas are in the dataset
+cARIA_NSW %>%
+  summarise(n_distinct(NAME))
+
+```
+
+
+This is many more distinct names for SA2 than in the Census data, need to check over th cARIA document and see what the NAME columns means
+

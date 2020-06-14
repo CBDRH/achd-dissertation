@@ -13,7 +13,7 @@ knitr::opts_knit$set(root.dir = '../..')
 library(dplyr)
 ```
 
-__Function For importing Table Builder data__ 
+## Function For importing Table Builder data 
 
 Table Builder data was downloaded on 5 Jun 2020. The data is located in Dissertation/data/Table_builder_SA2_NSW.
 
@@ -52,11 +52,11 @@ head(read.SA2.table('age_10P.csv'))
 
 ```
 
-__Creating Area level variables__
+## Creating Area level variables
 
 Going though each of the tables, adding variables into a final dataset, sa2.data.
 
-_total population, sex and country of birth_
+__total population, sex and country of birth__
 
 ``` {r}
 
@@ -80,7 +80,7 @@ sa2.data <- data.frame(sa2_area, total_pop, male, female, overseas)
 head(sa2.data)
 
 ```
-_childcare_
+__childcare__
 
 ``` {r}
 # load data
@@ -99,7 +99,7 @@ names(childcare) <- c('sa2_area','childcare')
 sa2.data <- merge(sa2.data, childcare, by = 'sa2_area')
 
 ``` 
-_employment_
+__employment__
 
 ``` {r}
 # load data
@@ -118,7 +118,7 @@ names(employ) <- c('sa2_area','employ')
 sa2.data <- merge(sa2.data, employ, by = 'sa2_area')
 
 ``` 
-_overcrowding_
+__overcrowding__
 ``` {r}
 # load data
 overcrowding_cat <- read.SA2.table('overcrowding.csv')
@@ -139,7 +139,7 @@ names(overcrowding) <- c('sa2_area','oc_positive', 'oc_negative')
 sa2.data <- merge(sa2.data, overcrowding, by = 'sa2_area')
 
 ```
-_single parents_
+__single parents__
 ``` {r}
 # load data
 single_parent_cat <- read.SA2.table('single_parent.csv')
@@ -158,7 +158,7 @@ names(single_parent) <- c('sa2_area','sp_male','sp_female','sp_total')
 sa2.data <- merge(sa2.data, single_parent, by = 'sa2_area')
 ```
 
-_single parents_
+__students__
 ``` {r}
 # load data
 student_cat <- read.SA2.table('student_status.csv')
@@ -178,7 +178,7 @@ sa2.data <- merge(sa2.data, student, by = 'sa2_area')
 
 ```
 
-_age_
+__age__
 ``` {r}
 # load data
 #add age groups for each area
@@ -202,7 +202,7 @@ sa2.data <- merge(sa2.data, age_cat, by = 'sa2_area')
 # Final table
 knitr::kable(head(sa2.data))
 
-write.csv(sa2.data, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
+#write.csv(sa2.data, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
 
 ```
 
