@@ -23,8 +23,8 @@ Each table row in this folder is an SA2 area for NSW, with the columns describin
 # Function to import and clean SA2 Tables
 read.SA2.table <-function (filename, path = "./Table_builder_SA2_NSW/") {
   
-#    '''
-#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #areas, and converts it to a dataframe
+#    ```
+#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #    areas, and converts it to a dataframe
 #    
 #    INPUT
 #    filename:       string, name of the file with extension
@@ -96,7 +96,7 @@ childcare <-  childcare_cat %>%
 names(childcare) <- c('sa2_area','childcare')
 
 # add to data set
-sa2.data <- merge(sa2.data, childcare, by = 'sa2_area')
+sa2.data2 <- merge(sa2.data, childcare, by = 'sa2_area')
 
 ``` 
 __employment__
@@ -115,7 +115,7 @@ employ <- employ_cat %>%
 names(employ) <- c('sa2_area','employ')
 
 # add to data set
-sa2.data <- merge(sa2.data, employ, by = 'sa2_area')
+sa2.data3 <- merge(sa2.data2, employ, by = 'sa2_area')
 
 ``` 
 __overcrowding__
@@ -136,7 +136,7 @@ overcrowding <- overcrowding_cat %>%
 names(overcrowding) <- c('sa2_area','oc_positive', 'oc_negative')
 
 # add to data set
-sa2.data <- merge(sa2.data, overcrowding, by = 'sa2_area')
+sa2.data4 <- merge(sa2.data3, overcrowding, by = 'sa2_area')
 
 ```
 __single parents__
@@ -155,7 +155,7 @@ single_parent <- single_parent_cat %>%
 names(single_parent) <- c('sa2_area','sp_male','sp_female','sp_total')
 
 # add to data set
-sa2.data <- merge(sa2.data, single_parent, by = 'sa2_area')
+sa2.data5 <- merge(sa2.data4, single_parent, by = 'sa2_area')
 ```
 
 __students__
@@ -173,7 +173,7 @@ student <- student_cat %>%
 names(student) <- c('sa2_area','student')
 
 # add to data set
-sa2.data <- merge(sa2.data, student, by = 'sa2_area')
+sa2.data6 <- merge(sa2.data5, student, by = 'sa2_area')
 
 
 ```
@@ -194,15 +194,44 @@ names(age_cat) <- c('sa2_area','age0','age10',
                     'age80','age90','age100')
 
 # add to data set
-sa2.data <- merge(sa2.data, age_cat, by = 'sa2_area')
+sa2.data7 <- merge(sa2.data6, age_cat, by = 'sa2_area')
 
 ```
+
+__Add SA2 Codes to dataset__
+
+
+``` {r}
+# Load the list of ASGS SA2 area names and codes
+SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv')
+
+# Filter for NSW and select onyl SA2 associated columns
+SA2_nsw <- SA2_aus %>%
+            filter(STATE_NAME_2016 == "New South Wales") %>%
+            select(SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016)
+
+# Add the SA2 area codes to the new dataset
+sa2.data8 <- merge(sa2.data7, SA2_nsw, by.x = 'sa2_area', 'SA2_NAME_2016')
+
+```
+
+This new dataset has one less record than before, suggesting something has been dropped from 'sa2.data'. Check what record is missing now, we can see that 'Total' is missing, we don't need this one for this dataset
+
+
+``` {r}
+missing.record <- anti_join(sa2.data7, sa2.data8)
+
+missing.record
+
+```
+
+
 
 ``` {r}
 # Final table
 knitr::kable(head(sa2.data))
 
-#write.csv(sa2.data, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
+#write.csv(sa2.data8, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
 
 ```
 

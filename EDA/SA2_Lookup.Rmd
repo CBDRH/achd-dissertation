@@ -1,0 +1,77 @@
+---
+title: "SA2 Lookup Table"
+author: "Calum Nicholson"
+date: "08/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# set 'data' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+library(dplyr)
+```
+
+## The SA2 Coding index 
+
+Allows SA2 areas to be looked up using with locality (suburb), Postcode and State.
+  
+``` {r}
+# Import SA2 coding index
+SA2_lookup <- read.csv('./ASGS/asgs2016codingindexes/2019 Locality to 2016 SA2 Coding Index.csv')
+
+# filter for NSW
+SA2_lookup_NSW <- SA2_lookup %>%
+                    filter(STATE == "NSW")
+# Get distinct SA2 names
+SA2_lookup_names <- SA2_lookup_NSW %>%
+                      distinct(SA2_NAME)
+
+```
+
+## Check how the coding index compared with the total list of SA2 areas
+
+``` {r}
+# Load the list of ASGS SA2 area names and codes
+SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv')
+
+# filter for NSW and select the column with SA2 names
+SA2_nsw <- SA2_aus %>%
+            filter(STATE_NAME_2016 == "New South Wales") %>%
+            select(SA2_NAME_2016)
+```
+
+
+``` {r}
+#Make column names the same
+names(SA2_nsw)[1] <- "SA2_NAME"
+
+#Get missing records
+missing.records <- anti_join(SA2_nsw, SA2_lookup_names)
+
+missing.records
+
+
+```
+
+
+A number of SA2 areas are missing from the localities index but looking at the documentation (Dissertation/data/ASGS/asgs2016codingindexes/2017 Locality to 2016 SA2 Coding Index Documentation.docx) we can see the methods used to create the coding indexes:
+
+_This means where a locality is covered by two or more SA2s the locality has been allocated to the SA2 where most of its population are located according to the underlying grid.  This ensures a specific gazetted locality/alias/extra locality entry is represented only once in the file and is allocated wholly to a specific SA2._
+
+This method may mean that some SA2 areas have been excluded because the locality has been placed into the area where most of its population is.
+
+``` {r}
+# Select Nessecary columns from lookup table
+SA2_lookup_NSW <- SA2_lookup_NSW %>%
+                   select(LOCALITY_NAME, POSTCODE, SA2_MAINCODE, SA2_NAME)
+
+# write the filtered lookup table to the output folder
+# write.csv(SA2_lookup_NSW, "./achd-dissertation/EDA/output/sa2_lookup.csv")
+
+
+```
+
+
+

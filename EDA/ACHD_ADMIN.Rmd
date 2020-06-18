@@ -1,0 +1,152 @@
+---
+title: "ACHD_ADMIN"
+author: "Calum Nicholson"
+date: "18/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+library(dplyr)
+library(stringr)
+```
+
+
+``` {r}
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+
+# Load ADMIN table from ACHD database
+ADMIN <- read.csv(paste(ACHD_path, 'Table_exports/ADMIN.csv', sep=""), header = FALSE)
+
+# Select id and location columns
+location <- select(ADMIN, V1, V10, V11, V12) %>%
+                      filter(V10 != "") %>%
+                      filter(V11 != "") %>% 
+                      filter(V12 == "NSW")
+
+# Rename columns
+names(location) <- c('achd_id', 'suburb', 'postcode', 'state')
+
+```
+
+
+``` {r}
+# Import SA2 Lookup table
+sa2_lookup <- read.csv("./achd-dissertation/EDA/output/sa2_lookup.csv")
+```
+
+
+``` {r}
+# create test set from locations data
+test <- location[1:10,]
+
+# add SA2 areas matched by hand
+test$by_hand <- c('Crows Nest - Watson',
+                  'Bolton Point - Teralba',
+                  'Picton - Tahmoon - Buxton',
+                  'Warriewood - Mona Vale',
+                  'Frenchs Forest - Belrose',
+                  'Blaxlan - Warrimoo - Lapstone',
+                  'Orange',
+                  'Glenmore Park - Regentville',
+                  'Leichhardt - Annandale',
+                  'Manly - Fairlight')
+
+knitr::kable(test)
+
+```
+
+``` {r}
+# select nessecary columns from both datasets
+test <- test %>%
+          dplyr::select(achd_id,suburb,postcode,by_hand)
+
+sa2_lookup <- sa2_lookup %>%
+                dplyr::select(LOCALITY_NAME,POSTCODE,SA2_NAME)
+
+# Convert postcodes and subrubs to character
+test$postcode <- as.character(test$postcode)
+sa2_lookup$POSTCODE <- as.character(sa2_lookup$POSTCODE)
+
+test$suburb <- as.character(test$suburb)
+sa2_lookup$LOCALITY_NAME <- as.character(sa2_lookup$LOCALITY_NAME)
+
+#join tables by postcode and suburb
+test_join <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
+                                            "postcode" = "POSTCODE"))
+
+```
+
+Only 6 of the 10 records successfully matched, after some investigation, it seems like the records that dont match have a large amount of whitespace after each suburb, to test, remove the whitespace after each suburb name in the test set
+
+
+
+``` {r}
+# Remove whitespace after each suburb in test
+test$suburb <- str_trim(test$suburb, side = "right")
+
+#join tables by postcode and suburb
+test_join2 <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
+                                            "postcode" = "POSTCODE"))
+
+```
+
+
+``` {r}
+# Convert postcodes and subrubs to character
+location$postcode <- as.character(location$postcode)
+location$suburb <- as.character(location$suburb)
+
+# Remove whitespace from subrub name in location dataset
+location$suburb <- str_trim(location$suburb, side = "both")
+
+# Change all suburbs to uppercase
+location$suburb <- str_to_upper(location$suburb, locale = "en")
+
+# Join the SA2 lookup table to the entire location dataset by suburb and postcode
+location_sa2 <- left_join(location, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
+                                                       "postcode" = "POSTCODE"))
+
+# Records that did not match to an SA2 area
+location_missing <- location_sa2 %>% filter(is.na(SA2_NAME))
+length(location_missing$state)
+
+```
+
+There are a number of records that did not match. A quick look by had shows a number of typos and/or incorrect postcodes. This may need to be fixed by hand.
+
+
+``` {r}
+# Count of ACHD patients in each SA2 area
+sa2_freq <- as.data.frame(table(location_sa2$SA2_NAME))
+# Rename columns
+names(sa2_freq) <- c('SA2_NAME', 'ACHD_Count')
+#Check spread
+hist(sa2_freq$ACHD_Count, breaks=50)
+
+```
+
+``` {r}
+# Import SA2 Lookup table
+sa2_Table_Builder <- read.csv("./achd-dissertation/EDA/output/sa2_table_builder.csv")
+```
+
+``` {r}
+# Join ACHD freqs number with area level predictors for some correlations
+area.data <- left_join(sa2_Table_Builder, sa2_freq, by = c('sa2_area' = 'SA2_NAME'))
+```
+
+
+
+
+
+
+
+
+
+
