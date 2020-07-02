@@ -1,0 +1,171 @@
+---
+title: "ACHD_FUP"
+author: "Calum Nicholson"
+date: "26/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(lubridate)
+library(ggplot2)
+```
+
+__Follow Up Status__
+
+This data is at an appointment level, each record is an appointment. For this inital EDA, we are interested in converting this to a patient level dataset and pulling out some basic information about the clinic visits.
+      -    How many patients are included?
+      -    How many appointments does each patient have?
+      -    What kinds of time range do these appointments include?
+
+
+``` {r}
+# load Follow Up Status dataset
+clinic.dates <- read.csv(paste(ACHD_path, 'Table_exports/FOLLOW-UP STATUS.csv', sep="")) %>%
+#               ------------Clean up the data-------------------------
+                select(person_id, fup_last_date) %>%                                    # select columns for id and clinic dates
+                rename( 'achd_id' = person_id, 'clinic_date' = fup_last_date) %>%       # rename columns
+                mutate_at("clinic_date",                              
+                          str_remove, pattern = " 0:00:00") %>%       # remove timestamp from visit date
+                mutate_at("clinic_date",                              
+                          as.Date, format='%d/%m/%Y') %>%             # Convert clinic dates to Date format
+                arrange(clinic_date)                                  # Arrange by clinic date in ascending order
+
+# create dataset of unique patient IDs for matching
+achd.id <- as.data.frame(unique(clinic.dates$achd_id)) %>%
+                rename( 'achd_id' = `unique(clinic.dates$achd_id)`)   # rename column same as above
+```
+
+The dataset contains `r length(clinic.dates$clinic_date)` records of clinic visits with `r length(achd.id$achd_id)` patients represented.
+
+__Patient level dataset__
+
+A nest join is be used to join the the clinic visits for each patient in the `clinic.dates` dataset to the individual patient ids in `achd.id`. 
+
+``` {r}
+# Join clinic dates with unique patient ids, creating pt level dataset with
+# one column as patient id and the second column as a list of clinic dates
+
+pt.level <- nest_join(achd.id, clinic.dates) %>%
+                rename( 'clinics' =  y)     # rename list-column with clinic dates
+
+
+# convert to tibble for processing
+pt.level.tb <- as_tibble(pt.level)
+
+```
+
+The resulting dataset, `pt.level.tb`, is has two columns, the first `achd_id` contains the indiviual patients IDs and the second `clinics` is a list-column, where each record contains a dataframe of all the clinics for that patient
+
+```{r}
+# the patient level dataset
+pt.level.tb %>% head()
+```
+
+The dataframes contained in `clinics` column looks like this (for one record):
+
+``` {r}
+# display one of the clinic_dates dataframes
+pt.level.tb %>% filter(achd_id == 1101) %>% .$clinics
+```
+
+To get some more information about the clinic visits for each patient, we will pull some information out of the `clinics` column
+        -    Number of clinics
+        -    First clinic date
+        -    Last Clinic date
+        -    Time between first and last clinic
+
+```{r}
+# Add some more rows to the dataset
+pt.level.tb <- pt.level.tb %>%
+  
+              mutate(no_clinics = map_dbl(map(clinics, ~ .$clinic_date), length),     # Number of clinics for each patient
+                     first_clinic = as_date(map_dbl(clinics, ~ min(.$clinic_date))),  # First clinic date for each patient
+                     last_clinic = as_date(map_dbl(clinics, ~ max(.$clinic_date))),   # Last clinic date for each patient
+                     date_diff = as.duration(first_clinic %--% last_clinic) / dyears(1))  # Number of days between first and last clinic
+```
+
+_Number of Clinics_
+
+The large majority of patients only have one clinic visit
+      -    Mean visits: `r mean(pt.level.tb$no_clinics)`
+      -    Median: `r median(pt.level.tb$no_clinics)`
+      -    Minimum: `r min(pt.level.tb$no_clinics)`
+      -    Max: `r max(pt.level.tb$no_clinics)`
+
+
+``` {r}
+ggplot(pt.level.tb, aes(x=no_clinics)) +
+      geom_histogram() +
+      labs(title = "Distribution of Number of Clinic Visits", 
+           y = "Count", 
+           x = "Number of Visits")
+```
+
+_First Clinic Date_
+``` {r}
+ggplot(pt.level.tb, aes(x=first_clinic)) +
+      geom_histogram() +
+      labs(title = "Distribution of First Clinic Visit", 
+           y = "Count", 
+           x = "Year")
+```
+
+_Last Clinic Date_
+``` {r}
+ggplot(pt.level.tb, aes(x=last_clinic)) +
+      geom_histogram() +
+      labs(title = "Distribution of Last Clinic Visit", 
+           y = "Count", 
+           x = "Year")
+```
+
+_Time between first and last clinic_
+
+ in years
+      -    Mean: `r mean(as.numeric(pt.level.tb$date_diff))`
+      -    Median: `r median(pt.level.tb$date_diff)`
+      -    Minimum: `r min(pt.level.tb$date_diff)`
+      -    Max: `r max(pt.level.tb$date_diff)`
+
+``` {r}
+
+class(pt.level.tb$date_diff)
+
+ggplot(pt.level.tb, aes(x=date_diff)) +
+      geom_histogram()+
+      labs(title = "Distribution of Days between first and last visit", 
+           y = "Count", 
+           x = "years")
+```
+
+
+__Notes for clinic selection__
+
+Select all clinics from 01/01/2000  
+Select those with 2 or more repeat visits  
+Check how demographics change before and after selecting for clinic visits  
+
+Check the Fup comment column for the specifics of each visit (i.e. DC, RC, SHC), how might the affect the sample selection and introduce bais
+
+
+
+
+
+
+
+
+
+
+

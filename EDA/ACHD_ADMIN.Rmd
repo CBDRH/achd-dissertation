@@ -11,34 +11,126 @@ knitr::opts_chunk$set(echo = TRUE)
 # set '2020_achd_map' folder as root directory
 knitr::opts_knit$set(root.dir = '../..')
 
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+
 library(dplyr)
 library(stringr)
+library(lubridate)
 ```
 
 
 ``` {r}
-# Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
-
 # Load ADMIN table from ACHD database
-ADMIN <- read.csv(paste(ACHD_path, 'Table_exports/ADMIN.csv', sep=""), header = FALSE)
+ADMIN <- read.csv(paste(ACHD_path, 'Table_exports/ADMIN.csv', sep="")) %>%
+#         ------------Clean up the data-------------------------  
+          select(person_id, adm_sex, adm_date_of_birth,                                   # select columns
+                 adm_suburb_locality, adm_postcode, adm_state_abbreviation) %>%
+  
+          rename('achd_id' = person_id,                                                   # rename columns
+                 'sex' = adm_sex,
+                 'dob' = adm_date_of_birth,
+                 'suburb' = adm_suburb_locality,
+                 'postcode' = adm_postcode,
+                 'state' = adm_state_abbreviation) %>%
+  
+          mutate_at("dob", str_remove, pattern = " 0:00:00") %>%                           # remove timestamp from visit date
+          mutate_at("dob", as.Date, format='%d/%m/%Y') %>%                                 # Convert clinic dates to Date format
+          mutate(age = as.period(dob %--% as.Date("01/01/2020", format='%d/%m/%Y'))) %>%   # Calculate age on 01 Jan 2020
+          mutate_at("suburb", str_trim, side = "both") %>%                                 # Remove whitespace from subrub name
+          mutate_at("suburb", str_to_upper, locale = "en") %>%                             # Change all suburbs to uppercase
+          mutate_at("suburb", as.character) %>%                                            # Convert suburb from to character format
+          mutate_at("postcode", as.character)                                              # Convert postcode to character format
+```
 
-# Select id and location columns
-location <- select(ADMIN, V1, V10, V11, V12) %>%
-                      filter(V10 != "") %>%
-                      filter(V11 != "") %>% 
-                      filter(V12 == "NSW")
 
-# Rename columns
-names(location) <- c('achd_id', 'suburb', 'postcode', 'state')
+``` {r}
+# Load the MAIN table from the ACHD database
 
+MAIN <- read.csv(paste(ACHD_path, 'Table_exports/MAIN.csv', sep=""))  %>%
+#       ------------Clean up the data-------------------------  
+        select(person_id, Other:PAS, SupraAS:ABNPV, ABNTV:TAPVD,                          # select columns
+               achd.1, SHC, DC, adm_RC) %>%                                             
+        rename('achd_id' = person_id)                                                     # rename columns
+
+```
+
+
+``` {r}
+# load the DEMOGRAPHICS table from the ACHD database
+DEMOG <- read.csv(paste(ACHD_path, 'Table_exports/DEMOGRAPHICS.csv', sep="")) %>%
+#       ------------Clean up the data-------------------------  
+         select(person_id, dem_country, dem_indigenous_status) %>%
+         rename("achd_id" = person_id)
+  
+  
 ```
 
 
 ``` {r}
 # Import SA2 Lookup table
-sa2_lookup <- read.csv("./achd-dissertation/EDA/output/sa2_lookup.csv")
+sa2_lookup <- read.csv("./achd-dissertation/EDA/output/sa2_lookup.csv") %>%
+#             ------------Clean up the data-----------------  
+              select(LOCALITY_NAME,POSTCODE,SA2_NAME) %>%                  # select subrub, postcode and sa2 name columns
+              mutate_at("POSTCODE", as.character) %>%                      # Convert postcode to character
+              mutate_at("LOCALITY_NAME", as.character)                     # Convert suburb name to character
 ```
+
+``` {r}
+# Add the SA2 area names to the ADMIN dataset, based on the suburb and postcode name
+ADMIN_sa2 <- left_join(ADMIN, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
+                                                 "postcode" = "POSTCODE"))
+```
+
+``` {r}
+# load Follow Up Status dataset
+FUP <- read.csv(paste(ACHD_path, 'Table_exports/FOLLOW-UP STATUS.csv', sep="")) %>%
+#               ------------Clean up the data-------------------------
+                select(person_id, fup_last_date, fup_comment) %>%          # select columns for id and clinic dates
+                rename( 'achd_id' = person_id,                             # rename columns
+                        'clinic_date' = fup_last_date, 
+                        'clinic_comment' = fup_comment) %>%       
+                mutate_at("clinic_date",                              
+                          str_remove, pattern = " 0:00:00") %>%            # remove timestamp from clinic date
+                mutate_at("clinic_date",                              
+                          as.Date, format='%d/%m/%Y') %>%                  # Convert clinic dates to Date format
+                arrange(clinic_date)                                       # Arrange by clinic date in ascending order
+
+```
+
+
+``` {r}
+# Join the table to create a person level dataset
+person_level <- left_join(ADMIN_sa2, DEMOG, by = "achd_id") %>%
+                left_join(MAIN, by = "achd_id")
+
+# deidentified version
+person_level_deid <- select(person_level, -dob, -suburb, -postcode, -state)
+
+
+
+```
+
+``` {r}
+
+# Count of ACHD patients in each SA2 area
+sa2_freq <- as.data.frame(table(person_level$SA2_NAME))
+# Rename columns
+names(sa2_freq) <- c('SA2_NAME', 'ACHD_Count')
+#Check spread
+hist(sa2_freq$ACHD_Count, breaks=50)
+
+```
+
+__To do__
+Add the follow up clinic dates and comments to the table via a nest join  
+Select data for patients with correct address recorded  
+Select data from clinic dates (i.e. as in ACHD_FUP.rmd file)  
+
+Check how removing missing data affects the demographics.  
+
+
+
 
 
 ``` {r}
@@ -66,8 +158,7 @@ knitr::kable(test)
 test <- test %>%
           dplyr::select(achd_id,suburb,postcode,by_hand)
 
-sa2_lookup <- sa2_lookup %>%
-                dplyr::select(LOCALITY_NAME,POSTCODE,SA2_NAME)
+
 
 # Convert postcodes and subrubs to character
 test$postcode <- as.character(test$postcode)
@@ -77,36 +168,21 @@ test$suburb <- as.character(test$suburb)
 sa2_lookup$LOCALITY_NAME <- as.character(sa2_lookup$LOCALITY_NAME)
 
 #join tables by postcode and suburb
-test_join <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
-                                            "postcode" = "POSTCODE"))
+test_join <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", "postcode" = "POSTCODE")) %>%
+                    rename("Match by Code" = SA2_NAME,
+                           "Match by Hand" = by_hand)
 
 ```
 
-Only 6 of the 10 records successfully matched, after some investigation, it seems like the records that dont match have a large amount of whitespace after each suburb, to test, remove the whitespace after each suburb name in the test set
-
-
-
-``` {r}
-# Remove whitespace after each suburb in test
-test$suburb <- str_trim(test$suburb, side = "right")
-
-#join tables by postcode and suburb
-test_join2 <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
-                                            "postcode" = "POSTCODE"))
+```{r}
+knitr::kable(test_join)
 
 ```
-
 
 ``` {r}
 # Convert postcodes and subrubs to character
 location$postcode <- as.character(location$postcode)
 location$suburb <- as.character(location$suburb)
-
-# Remove whitespace from subrub name in location dataset
-location$suburb <- str_trim(location$suburb, side = "both")
-
-# Change all suburbs to uppercase
-location$suburb <- str_to_upper(location$suburb, locale = "en")
 
 # Join the SA2 lookup table to the entire location dataset by suburb and postcode
 location_sa2 <- left_join(location, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
@@ -132,13 +208,17 @@ hist(sa2_freq$ACHD_Count, breaks=50)
 ```
 
 ``` {r}
+
 # Import SA2 Lookup table
 sa2_Table_Builder <- read.csv("./achd-dissertation/EDA/output/sa2_table_builder.csv")
+
 ```
 
 ``` {r}
+
 # Join ACHD freqs number with area level predictors for some correlations
 area.data <- left_join(sa2_Table_Builder, sa2_freq, by = c('sa2_area' = 'SA2_NAME'))
+
 ```
 
 
