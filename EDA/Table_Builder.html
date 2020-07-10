@@ -377,8 +377,8 @@ summary {
 <pre class="r"><code># Function to import and clean SA2 Tables
 read.SA2.table &lt;-function (filename, path = &quot;./Table_builder_SA2_NSW/&quot;) {
   
-#    '''
-#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #areas, and converts it to a dataframe
+#    ```
+#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #    areas, and converts it to a dataframe
 #    
 #    INPUT
 #    filename:       string, name of the file with extension
@@ -468,7 +468,7 @@ childcare &lt;-  childcare_cat %&gt;%
 names(childcare) &lt;- c('sa2_area','childcare')
 
 # add to data set
-sa2.data &lt;- merge(sa2.data, childcare, by = 'sa2_area')</code></pre>
+sa2.data2 &lt;- merge(sa2.data, childcare, by = 'sa2_area')</code></pre>
 <p><strong>employment</strong></p>
 <pre class="r"><code># load data
 employ_cat &lt;- read.SA2.table('employment_status.csv')
@@ -483,7 +483,7 @@ employ &lt;- employ_cat %&gt;%
 names(employ) &lt;- c('sa2_area','employ')
 
 # add to data set
-sa2.data &lt;- merge(sa2.data, employ, by = 'sa2_area')</code></pre>
+sa2.data3 &lt;- merge(sa2.data2, employ, by = 'sa2_area')</code></pre>
 <p><strong>overcrowding</strong></p>
 <pre class="r"><code># load data
 overcrowding_cat &lt;- read.SA2.table('overcrowding.csv')
@@ -501,7 +501,7 @@ overcrowding &lt;- overcrowding_cat %&gt;%
 names(overcrowding) &lt;- c('sa2_area','oc_positive', 'oc_negative')
 
 # add to data set
-sa2.data &lt;- merge(sa2.data, overcrowding, by = 'sa2_area')</code></pre>
+sa2.data4 &lt;- merge(sa2.data3, overcrowding, by = 'sa2_area')</code></pre>
 <p><strong>single parents</strong></p>
 <pre class="r"><code># load data
 single_parent_cat &lt;- read.SA2.table('single_parent.csv')
@@ -517,7 +517,7 @@ single_parent &lt;- single_parent_cat %&gt;%
 names(single_parent) &lt;- c('sa2_area','sp_male','sp_female','sp_total')
 
 # add to data set
-sa2.data &lt;- merge(sa2.data, single_parent, by = 'sa2_area')</code></pre>
+sa2.data5 &lt;- merge(sa2.data4, single_parent, by = 'sa2_area')</code></pre>
 <p><strong>students</strong></p>
 <pre class="r"><code># load data
 student_cat &lt;- read.SA2.table('student_status.csv')
@@ -532,7 +532,7 @@ student &lt;- student_cat %&gt;%
 names(student) &lt;- c('sa2_area','student')
 
 # add to data set
-sa2.data &lt;- merge(sa2.data, student, by = 'sa2_area')</code></pre>
+sa2.data6 &lt;- merge(sa2.data5, student, by = 'sa2_area')</code></pre>
 <p><strong>age</strong></p>
 <pre class="r"><code># load data
 #add age groups for each area
@@ -548,7 +548,28 @@ names(age_cat) &lt;- c('sa2_area','age0','age10',
                     'age80','age90','age100')
 
 # add to data set
-sa2.data &lt;- merge(sa2.data, age_cat, by = 'sa2_area')</code></pre>
+sa2.data7 &lt;- merge(sa2.data6, age_cat, by = 'sa2_area')</code></pre>
+<p><strong>Add SA2 Codes to dataset</strong></p>
+<pre class="r"><code># Load the list of ASGS SA2 area names and codes
+SA2_aus &lt;- read.csv('./ASGS/SA2_2016_AUST.csv')
+
+# Filter for NSW and select onyl SA2 associated columns
+SA2_nsw &lt;- SA2_aus %&gt;%
+            filter(STATE_NAME_2016 == &quot;New South Wales&quot;) %&gt;%
+            select(SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016)
+
+# Add the SA2 area codes to the new dataset
+sa2.data8 &lt;- merge(sa2.data7, SA2_nsw, by.x = 'sa2_area', 'SA2_NAME_2016')</code></pre>
+<p>This new dataset has one less record than before, suggesting something has been dropped from ‘sa2.data’. Check what record is missing now, we can see that ‘Total’ is missing, we don’t need this one for this dataset</p>
+<pre class="r"><code>missing.record &lt;- anti_join(sa2.data7, sa2.data8)</code></pre>
+<pre><code>## Joining, by = c(&quot;sa2_area&quot;, &quot;total_pop&quot;, &quot;male&quot;, &quot;female&quot;, &quot;overseas&quot;, &quot;childcare&quot;, &quot;employ&quot;, &quot;oc_positive&quot;, &quot;oc_negative&quot;, &quot;sp_male&quot;, &quot;sp_female&quot;, &quot;sp_total&quot;, &quot;student&quot;, &quot;age0&quot;, &quot;age10&quot;, &quot;age20&quot;, &quot;age30&quot;, &quot;age40&quot;, &quot;age50&quot;, &quot;age60&quot;, &quot;age70&quot;, &quot;age80&quot;, &quot;age90&quot;, &quot;age100&quot;)</code></pre>
+<pre class="r"><code>missing.record</code></pre>
+<pre><code>##   sa2_area total_pop     male   female overseas childcare   employ
+## 1    Total   7480230 49.27665 50.72325 34.50462   22.1818 3.015295
+##   oc_positive oc_negative  sp_male sp_female sp_total  student   age0
+## 1    57.54219    4.272671 0.738627  3.417716 4.156343 24.36989 943320
+##    age10   age20   age30  age40  age50  age60  age70  age80 age90 age100
+## 1 891437 1016834 1040081 995608 955264 804510 509865 262011 60276   1025</code></pre>
 <pre class="r"><code># Final table
 knitr::kable(head(sa2.data))</code></pre>
 <table>
@@ -559,187 +580,54 @@ knitr::kable(head(sa2.data))</code></pre>
 <th align="right">male</th>
 <th align="right">female</th>
 <th align="right">overseas</th>
-<th align="right">childcare</th>
-<th align="right">employ</th>
-<th align="right">oc_positive</th>
-<th align="right">oc_negative</th>
-<th align="right">sp_male</th>
-<th align="right">sp_female</th>
-<th align="right">sp_total</th>
-<th align="right">student</th>
-<th align="right">age0</th>
-<th align="right">age10</th>
-<th align="right">age20</th>
-<th align="right">age30</th>
-<th align="right">age40</th>
-<th align="right">age50</th>
-<th align="right">age60</th>
-<th align="right">age70</th>
-<th align="right">age80</th>
-<th align="right">age90</th>
-<th align="right">age100</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">Acacia Gardens</td>
-<td align="right">3796</td>
-<td align="right">50.10537</td>
-<td align="right">49.89463</td>
-<td align="right">44.52055</td>
-<td align="right">27.73973</td>
-<td align="right">2.766069</td>
-<td align="right">75.49957</td>
-<td align="right">2.432667</td>
-<td align="right">0.5795574</td>
-<td align="right">2.871444</td>
-<td align="right">3.451001</td>
-<td align="right">29.21496</td>
-<td align="right">626</td>
-<td align="right">501</td>
-<td align="right">491</td>
-<td align="right">727</td>
-<td align="right">553</td>
-<td align="right">488</td>
-<td align="right">275</td>
-<td align="right">93</td>
-<td align="right">30</td>
-<td align="right">3</td>
-<td align="right">0</td>
+<td align="left">Braidwood</td>
+<td align="right">3875</td>
+<td align="right">50.45161</td>
+<td align="right">49.47097</td>
+<td align="right">23.87097</td>
 </tr>
 <tr class="even">
-<td align="left">Adamstown - Kotara</td>
-<td align="right">15600</td>
-<td align="right">49.09615</td>
-<td align="right">50.88462</td>
-<td align="right">14.94231</td>
-<td align="right">26.80128</td>
-<td align="right">3.006410</td>
-<td align="right">67.58663</td>
-<td align="right">1.640601</td>
-<td align="right">0.8461538</td>
-<td align="right">3.333333</td>
-<td align="right">4.179487</td>
-<td align="right">26.33974</td>
-<td align="right">2105</td>
-<td align="right">1916</td>
-<td align="right">1929</td>
-<td align="right">2119</td>
-<td align="right">2252</td>
-<td align="right">1865</td>
-<td align="right">1431</td>
-<td align="right">1189</td>
-<td align="right">675</td>
-<td align="right">122</td>
-<td align="right">0</td>
+<td align="left">Karabar</td>
+<td align="right">8241</td>
+<td align="right">49.39934</td>
+<td align="right">50.60066</td>
+<td align="right">22.89771</td>
 </tr>
 <tr class="odd">
-<td align="left">Albion Park - Macquarie Pass</td>
-<td align="right">14331</td>
-<td align="right">48.44742</td>
-<td align="right">51.58049</td>
-<td align="right">17.24234</td>
-<td align="right">28.87447</td>
-<td align="right">2.846975</td>
-<td align="right">73.19422</td>
-<td align="right">1.946228</td>
-<td align="right">0.7605889</td>
-<td align="right">3.642453</td>
-<td align="right">4.403042</td>
-<td align="right">27.01835</td>
-<td align="right">2087</td>
-<td align="right">2213</td>
-<td align="right">1758</td>
-<td align="right">1861</td>
-<td align="right">2010</td>
-<td align="right">1900</td>
-<td align="right">1293</td>
-<td align="right">715</td>
-<td align="right">374</td>
-<td align="right">109</td>
-<td align="right">0</td>
+<td align="left">Queanbeyan</td>
+<td align="right">10838</td>
+<td align="right">50.11072</td>
+<td align="right">49.87082</td>
+<td align="right">32.94888</td>
 </tr>
 <tr class="even">
-<td align="left">Albion Park Rail</td>
-<td align="right">6918</td>
-<td align="right">48.80023</td>
-<td align="right">51.19977</td>
-<td align="right">20.87308</td>
-<td align="right">24.24111</td>
-<td align="right">3.223475</td>
-<td align="right">66.17375</td>
-<td align="right">3.031423</td>
-<td align="right">1.1997687</td>
-<td align="right">5.203816</td>
-<td align="right">6.403585</td>
-<td align="right">21.62475</td>
-<td align="right">888</td>
-<td align="right">834</td>
-<td align="right">906</td>
-<td align="right">824</td>
-<td align="right">792</td>
-<td align="right">948</td>
-<td align="right">822</td>
-<td align="right">527</td>
-<td align="right">295</td>
-<td align="right">86</td>
-<td align="right">0</td>
+<td align="left">Queanbeyan - East</td>
+<td align="right">4785</td>
+<td align="right">51.43156</td>
+<td align="right">48.56844</td>
+<td align="right">31.24347</td>
 </tr>
 <tr class="odd">
-<td align="left">Albury - East</td>
-<td align="right">15047</td>
-<td align="right">48.07603</td>
-<td align="right">51.93726</td>
-<td align="right">14.84681</td>
-<td align="right">25.35389</td>
-<td align="right">2.638400</td>
-<td align="right">70.43211</td>
-<td align="right">1.035766</td>
-<td align="right">0.6512926</td>
-<td align="right">2.877650</td>
-<td align="right">3.528943</td>
-<td align="right">26.50362</td>
-<td align="right">2218</td>
-<td align="right">1988</td>
-<td align="right">2181</td>
-<td align="right">2109</td>
-<td align="right">1961</td>
-<td align="right">1669</td>
-<td align="right">1391</td>
-<td align="right">928</td>
-<td align="right">491</td>
-<td align="right">101</td>
-<td align="right">3</td>
+<td align="left">Queanbeyan Region</td>
+<td align="right">16945</td>
+<td align="right">50.87046</td>
+<td align="right">49.18265</td>
+<td align="right">23.04515</td>
 </tr>
 <tr class="even">
-<td align="left">Albury - North</td>
-<td align="right">9845</td>
-<td align="right">48.77603</td>
-<td align="right">51.17318</td>
-<td align="right">19.25851</td>
-<td align="right">21.76739</td>
-<td align="right">3.676993</td>
-<td align="right">62.66755</td>
-<td align="right">1.933641</td>
-<td align="right">1.0868461</td>
-<td align="right">4.286440</td>
-<td align="right">5.373286</td>
-<td align="right">21.94007</td>
-<td align="right">1200</td>
-<td align="right">1282</td>
-<td align="right">1335</td>
-<td align="right">1140</td>
-<td align="right">1305</td>
-<td align="right">1290</td>
-<td align="right">1060</td>
-<td align="right">738</td>
-<td align="right">406</td>
-<td align="right">90</td>
-<td align="right">0</td>
+<td align="left">Queanbeyan West - Jerrabomberra</td>
+<td align="right">12642</td>
+<td align="right">49.77061</td>
+<td align="right">50.22939</td>
+<td align="right">20.02848</td>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>#write.csv(sa2.data, &quot;./achd-dissertation/EDA/output/sa2_table_builder.csv&quot;)</code></pre>
+<pre class="r"><code>#write.csv(sa2.data8, &quot;./achd-dissertation/EDA/output/sa2_table_builder.csv&quot;)</code></pre>
 </div>
 
 

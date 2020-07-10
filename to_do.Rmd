@@ -1,0 +1,62 @@
+---
+title: "To_Do"
+author: "Calum Nicholson"
+date: "10/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/'
+
+library(dplyr)
+library(stringr)
+library(lubridate)
+library(ggplot2)
+```
+
+__ACHD_ADMIN__
+
+some code chunks taken from ACHD_ADMIN.rmd, to look at later
+
+``` {r}
+# load Follow Up Status dataset
+FUP <- read.csv(paste(ACHD_path, 'Table_exports/FOLLOW-UP STATUS.csv', sep="")) %>%
+#               ------------Clean up the data-------------------------
+                select(person_id, fup_last_date, fup_comment) %>%          # select columns for id and clinic dates
+                rename( 'achd_id' = person_id,                             # rename columns
+                        'clinic_date' = fup_last_date, 
+                        'clinic_comment' = fup_comment) %>%       
+                mutate_at("clinic_date",                              
+                          str_remove, pattern = " 0:00:00") %>%            # remove timestamp from clinic date
+                mutate_at("clinic_date",                              
+                          as.Date, format='%d/%m/%Y') %>%                  # Convert clinic dates to Date format
+                arrange(clinic_date)                                       # Arrange by clinic date in ascending order
+
+```
+
+``` {r}
+# Count of ACHD patients in each SA2 area
+sa2_freq <- as.data.frame(table(person_level$sa2)) %>%
+              rename("sa2" = Var1,
+                     "ACHD_count" = Freq)
+
+ggplot(sa2_freq, aes(x=ACHD_count)) +
+      geom_histogram() +
+      labs(title = "Distribution of ACHD population ub each SA2 area", 
+           y = "Count", 
+           x = "ACHD population")
+```
+
+``` {r}
+# Import SA2 Lookup table
+sa2_Table_Builder <- read.csv("./achd-dissertation/EDA/output/sa2_table_builder.csv")
+
+# Join ACHD freqs number with area level predictors for some correlations
+area_level <- left_join(sa2_Table_Builder, sa2_freq, by = c('sa2_area' = 'sa2'))
+```

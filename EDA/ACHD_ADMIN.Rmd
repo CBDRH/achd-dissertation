@@ -5,6 +5,13 @@ date: "18/06/2020"
 output: html_document
 ---
 
+__To do__
+Select data for patients with correct address recorded  
+Check through values for clinic_comment, what do they all mean how can we organise them? 
+Check how removing missing data affects the demographics.
+
+
+
 ```{r setup, include=FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -12,68 +19,112 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = '../..')
 
 # Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/'
 
 library(dplyr)
+library(tidyr)
+library(purrr)
 library(stringr)
 library(lubridate)
+library(ggplot2)
 ```
 
+__Create a 'Person-Level' Dataset__
 
+The ACHD database contains a number of tables, joined by the person identified "person_id". These will be joined into a single person level datasat. The key tables are:
+    -    ADMIN: names, addresses, contact details, dob, sex.  
+    -    MAIN: contains the minimum dataset, with diagnosis information and who their clincian is (i,e. DC, RC or SHC).  
+    -    DEMOGRAPHICS: This contains basic demographics information. A lot of this table in incomplete, however there is useful information in country of birth and indigenous status.  
+    -    FOLLOW UP STATUS: This is a 'clinic level' dataset, where each record is a clinic visit, with the date of the visit and a comment about which clinic is was (i.e. which private doctor, or public clinic or outreach clinic)     
+    -    CLINIC VISIT: Similar to the follow up table but contained more detailed info (i.e bp and heart rate). has only been collecting info for the past two years and only for DCs patients  
+    -    DEATH: Recording deceased patients, taken from NDI data linkage.
+
+_ADMIN_
 ``` {r}
 # Load ADMIN table from ACHD database
 ADMIN <- read.csv(paste(ACHD_path, 'Table_exports/ADMIN.csv', sep="")) %>%
 #         ------------Clean up the data-------------------------  
-          select(person_id, adm_sex, adm_date_of_birth,                                   # select columns
+          # select columns
+          select(person_id, adm_sex, adm_date_of_birth,                                   
                  adm_suburb_locality, adm_postcode, adm_state_abbreviation) %>%
-  
-          rename('achd_id' = person_id,                                                   # rename columns
+          # rename columns
+          rename('achd_id' = person_id,                                                   
                  'sex' = adm_sex,
                  'dob' = adm_date_of_birth,
                  'suburb' = adm_suburb_locality,
                  'postcode' = adm_postcode,
                  'state' = adm_state_abbreviation) %>%
-  
-          mutate_at("dob", str_remove, pattern = " 0:00:00") %>%                           # remove timestamp from visit date
-          mutate_at("dob", as.Date, format='%d/%m/%Y') %>%                                 # Convert clinic dates to Date format
-          mutate(age = as.period(dob %--% as.Date("01/01/2020", format='%d/%m/%Y'))) %>%   # Calculate age on 01 Jan 2020
-          mutate_at("suburb", str_trim, side = "both") %>%                                 # Remove whitespace from subrub name
-          mutate_at("suburb", str_to_upper, locale = "en") %>%                             # Change all suburbs to uppercase
-          mutate_at("suburb", as.character) %>%                                            # Convert suburb from to character format
-          mutate_at("postcode", as.character)                                              # Convert postcode to character format
+          # remove timestamp from visit date
+          mutate_at("dob", str_remove, pattern = " 0:00:00") %>%
+          # Convert clinic dates to Date format
+          mutate_at("dob", as.Date, format='%d/%m/%Y') %>% 
+          # Calculate age on 01 Jan 2020
+          mutate(age = as.period(dob %--% as.Date("01/01/2020", format='%d/%m/%Y'))) %>% 
+          # Remove whitespace from suburb name
+          mutate_at("suburb", str_trim, side = "both") %>% 
+          # Change all suburbs to uppercase
+          mutate_at("suburb", str_to_upper, locale = "en") %>% 
+          # Convert suburb from to character format
+          mutate_at("suburb", as.character) %>%     
+          # Convert postcode to character format
+          mutate_at("postcode", as.character)                                              
 ```
 
-
+_MAIN_
 ``` {r}
 # Load the MAIN table from the ACHD database
 
 MAIN <- read.csv(paste(ACHD_path, 'Table_exports/MAIN.csv', sep=""))  %>%
 #       ------------Clean up the data-------------------------  
-        select(person_id, Other:PAS, SupraAS:ABNPV, ABNTV:TAPVD,                          # select columns
-               achd.1, SHC, DC, adm_RC) %>%                                             
-        rename('achd_id' = person_id)                                                     # rename columns
+        select(person_id, Other:PAS, SupraAS:ABNPV, ABNTV:TAPVD,                          
+               achd.1, SHC, DC, adm_RC) %>% 
+        rename('achd_id' = person_id,
+               'dx_comment' = achd.1,
+               'RC' = adm_RC)                                                     
 
 ```
 
-
+_DEMOGRAPHICS_
 ``` {r}
 # load the DEMOGRAPHICS table from the ACHD database
 DEMOG <- read.csv(paste(ACHD_path, 'Table_exports/DEMOGRAPHICS.csv', sep="")) %>%
 #       ------------Clean up the data-------------------------  
          select(person_id, dem_country, dem_indigenous_status) %>%
-         rename("achd_id" = person_id)
+         rename("achd_id" = person_id,
+                "cob" = dem_country,
+                "ats" = dem_indigenous_status)
   
   
 ```
 
+_DEATH_
+``` {r}
+# load the DEATH table from the ACHD database
+DEATH <- read.csv(paste(ACHD_path, 'Table_exports/DEATH.csv', sep="")) %>%
+#        ------------Clean up the data-------------------------  
+         # remove unnecessary columns
+         select(-death_comment, -date_status) %>%                             
+         # remove timestamp from death date
+         mutate_at("death_date", str_remove, pattern = " 0:00:00") %>%        
+         # convert death date to date type
+         mutate_at("death_date", as.Date, format='%d/%m/%Y') %>%              
+         # add flag for death
+         mutate(death = 1) %>%                                                
+         # rename columns
+         rename("achd_id" = person_id)                                        
+```
 
+_SA2 AREAS_
 ``` {r}
 # Import SA2 Lookup table
 sa2_lookup <- read.csv("./achd-dissertation/EDA/output/sa2_lookup.csv") %>%
 #             ------------Clean up the data-----------------  
-              select(LOCALITY_NAME,POSTCODE,SA2_NAME) %>%                  # select subrub, postcode and sa2 name columns
-              mutate_at("POSTCODE", as.character) %>%                      # Convert postcode to character
-              mutate_at("LOCALITY_NAME", as.character)                     # Convert suburb name to character
+              # select subrub, postcode and sa2 name columns
+              select(LOCALITY_NAME,POSTCODE,SA2_NAME) %>% 
+              # Convert postcode to character
+              mutate_at("POSTCODE", as.character) %>%    
+              # Convert suburb name to character
+              mutate_at("LOCALITY_NAME", as.character)                     
 ```
 
 ``` {r}
@@ -82,60 +133,157 @@ ADMIN_sa2 <- left_join(ADMIN, sa2_lookup, by = c("suburb" = "LOCALITY_NAME",
                                                  "postcode" = "POSTCODE"))
 ```
 
+_FOLLOW UP STATUS_
 ``` {r}
 # load Follow Up Status dataset
 FUP <- read.csv(paste(ACHD_path, 'Table_exports/FOLLOW-UP STATUS.csv', sep="")) %>%
 #               ------------Clean up the data-------------------------
-                select(person_id, fup_last_date, fup_comment) %>%          # select columns for id and clinic dates
-                rename( 'achd_id' = person_id,                             # rename columns
+                # select columns for id and clinic dates
+                select(person_id, fup_last_date, fup_comment) %>%
+                # rename columns
+                rename( 'achd_id' = person_id,                        
                         'clinic_date' = fup_last_date, 
-                        'clinic_comment' = fup_comment) %>%       
-                mutate_at("clinic_date",                              
-                          str_remove, pattern = " 0:00:00") %>%            # remove timestamp from clinic date
-                mutate_at("clinic_date",                              
-                          as.Date, format='%d/%m/%Y') %>%                  # Convert clinic dates to Date format
-                arrange(clinic_date)                                       # Arrange by clinic date in ascending order
-
+                        'clinic_comment' = fup_comment) %>%
+                # remove timestamp from clinic date
+                mutate_at("clinic_date", str_remove, pattern = " 0:00:00") %>%       
+                # Convert clinic dates to Date format
+                mutate_at("clinic_date",as.Date, format='%d/%m/%Y') %>%  
+                # Arrange by clinic date in ascending order
+                arrange(clinic_date)   
 ```
 
+_Clinic Comments_
+
+``` {r}
+clinic.comment <- as.data.frame(table(FUP$clinic_comment)) %>%
+              #rename columns
+              rename("clinic_comment" = Var1,
+                     "count" = Freq) %>%
+              #arrange by Frequency
+              arrange(desc(count))
+```
+
+These are comments on each clinic visit, generally telling us which clinic was attended at this date, DC and RC are the two main CHD cardiologists, SHC is the public CHD clinic 'sydney heart centre'. These comments are free text and inconsistent but will be important when determining clinic visits. There are `r length(clinic.comment$clinic_comment)` types of comments here.
+
+```{r}
+#Top 15 clinic comments
+knitr::kable(clinic.comment[1:15,])
+```
 
 ``` {r}
 # Join the table to create a person level dataset
-person_level <- left_join(ADMIN_sa2, DEMOG, by = "achd_id") %>%
-                left_join(MAIN, by = "achd_id")
+                # Add data from Demographics Table
+person.level <- left_join(ADMIN_sa2, DEMOG, by = "achd_id") %>%
+                rename("sa2" = SA2_NAME) %>%
+                # Add data from MAIN table
+                left_join(MAIN, by = "achd_id") %>%
+                # Add data from DEATH table
+                left_join(DEATH, by = 'achd_id') %>%
+                # add age at death   
+                mutate(age_death = as.period(dob %--% death_date)) %>% 
+                # add data from Follow Up Status table
+                nest_join(FUP, by = 'achd_id') %>%
+                rename( 'clinics' =  y)
 
 # deidentified version
-person_level_deid <- select(person_level, -dob, -suburb, -postcode, -state)
-
-
+person.level.deid <- select(person_level, -dob, -suburb, -postcode, -state)
 
 ```
 
+The dataframes contained in `clinics` column looks like this (for one record):
+
 ``` {r}
-
-# Count of ACHD patients in each SA2 area
-sa2_freq <- as.data.frame(table(person_level$SA2_NAME))
-# Rename columns
-names(sa2_freq) <- c('SA2_NAME', 'ACHD_Count')
-#Check spread
-hist(sa2_freq$ACHD_Count, breaks=50)
-
+# display one of the clinic_dates dataframes
+person.level %>% filter(achd_id == 1101) %>% .$clinics
 ```
 
-__To do__
-Add the follow up clinic dates and comments to the table via a nest join  
-Select data for patients with correct address recorded  
-Select data from clinic dates (i.e. as in ACHD_FUP.rmd file)  
+To get some more information about the clinic visits for each patient, we will pull some information out of the `clinics` column
+        -    Number of clinics
+        -    First clinic date
+        -    Last Clinic date
+        -    Time between first and last clinic
+        -    Age at first and last clinic
 
-Check how removing missing data affects the demographics.  
+```{r, warning = FALSE}
+# Add some more rows to the dataset
+person.level <- person.level %>%
+#             --------------ADD NEW COLUMNS ABOUT CLINIC DATES________________________
+              mutate(
+              # Number of clinics for each patient
+              no_clinics = map_dbl(map(clinics, ~ .$clinic_date), length), 
+              # First clinic date for each patient
+              first_clinic = as_date(map_dbl(clinics, ~ min(.$clinic_date))),
+              # Last clinic date for each patient
+              last_clinic = as_date(map_dbl(clinics, ~ max(.$clinic_date))), 
+              # Number of days between first and last clinic
+              date_diff = as.duration(first_clinic %--% last_clinic) / dyears(1),
+              # age at first clinic attendance
+              age_first_clinic = as.period(dob %--% first_clinic),
+              # age at last clinic attendance
+              age_last_clinic = as.period(dob %--% last_clinic),
+              # Remove visits before 01/01/2000
+              clinics_2000 = map(clinics, ~ filter(., clinic_date >= as.Date('01/01/2000', format='%d/%m/%Y'))),
+              # number of clinics for each patient
+              no_clinics_2000 = map_dbl(map(clinics_2000, ~ .$clinic_date), length),
+              # Flag for patient with no visit before 2000
+              clinic_drop = ifelse(no_clinics_2000 == 0, 1, 0),
+              # First clinic date for each patient
+              first_clinic_2000 = as_date(map_dbl(clinics_2000, ~ min(.$clinic_date))), 
+              # Last clinic date for each patient
+              last_clinic_2000 = as_date(map_dbl(clinics_2000, ~ max(.$clinic_date))),  
+              # Years between first and last clinic 
+              date_diff_2000 = as.duration(first_clinic_2000%--%last_clinic_2000)/dyears(1),   
+              # Recode infinity to NA
+              date_diff_2000 = replace(date_diff_2000, date_diff_2000 == -Inf, NA),
+              # age at first clinic attendance
+              age_first_clinic_2000 = as.period(dob %--% first_clinic_2000),
+              # age at last clinic attendance
+              age_last_clinic_2000 = as.period(dob %--% last_clinic_2000)
+              ) 
+```
 
+__Selecting for records with valid addresses__
 
-
+Check the dataset for missing postcodes, states, overseas or interstate addresses. a few of the records have some missing data but we can safely infer what the missing information is and fix them up:
+      -    achd_id 910 has subrub of CLAREVILLE, but is missing the postcode, CLAREVILLE only matches to one SA2 area in the lookup table so we can safely assume the postcode is the same as the lookup table: 2107
+      -    achd_ids 4732, 4883, 4892 the state field missing, but the postcode and suburb are in NSW, so we can add the state as NSW
 
 
 ``` {r}
+person.level <- person.level %>%
+                mutate(
+                  postcode = replace(postcode, achd_id == 910, 2107),
+                  suburb = replace(suburb, achd_id == 4732, "NSW"),
+                  suburb = replace(suburb, achd_id == 4883, "NSW"),
+                  suburb = replace(suburb, achd_id == 4892, "NSW")
+                       ) %>%
+                mutate(
+                  valid_address = ifelse( ( suburb != "" & suburb != "OVERSEAS" & suburb != "-") &
+                                            postcode != "" &
+                                            state == "NSW", 1, 0)
+                       )
+```
+
+There are still some typos in teh address fields from the dataset, resulting in 239 records that need to be checked by hand.
+
+``` {r}
+person.level %>% filter(valid_address == 1) %>%
+                 filter(is.na(sa2)) %>%
+                 select(achd_id,postcode, suburb, state, sa2)
+```
+
+
+
+__Note: Testing the SA2 Area Join__
+
+``` {r}
+location <- person_level %>%
+              select(achd_id,suburb,postcode) %>%
+              mutate_at("suburb", as.character) %>%  
+              mutate_at("postcode", as.character)
+
 # create test set from locations data
-test <- location[1:10,]
+test <- location[c(1:8,10,12),]
 
 # add SA2 areas matched by hand
 test$by_hand <- c('Crows Nest - Watson',
@@ -154,19 +302,6 @@ knitr::kable(test)
 ```
 
 ``` {r}
-# select nessecary columns from both datasets
-test <- test %>%
-          dplyr::select(achd_id,suburb,postcode,by_hand)
-
-
-
-# Convert postcodes and subrubs to character
-test$postcode <- as.character(test$postcode)
-sa2_lookup$POSTCODE <- as.character(sa2_lookup$POSTCODE)
-
-test$suburb <- as.character(test$suburb)
-sa2_lookup$LOCALITY_NAME <- as.character(sa2_lookup$LOCALITY_NAME)
-
 #join tables by postcode and suburb
 test_join <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", "postcode" = "POSTCODE")) %>%
                     rename("Match by Code" = SA2_NAME,
@@ -178,51 +313,6 @@ test_join <- left_join(test, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", "pos
 knitr::kable(test_join)
 
 ```
-
-``` {r}
-# Convert postcodes and subrubs to character
-location$postcode <- as.character(location$postcode)
-location$suburb <- as.character(location$suburb)
-
-# Join the SA2 lookup table to the entire location dataset by suburb and postcode
-location_sa2 <- left_join(location, sa2_lookup, by = c("suburb" = "LOCALITY_NAME", 
-                                                       "postcode" = "POSTCODE"))
-
-# Records that did not match to an SA2 area
-location_missing <- location_sa2 %>% filter(is.na(SA2_NAME))
-length(location_missing$state)
-
-```
-
-There are a number of records that did not match. A quick look by had shows a number of typos and/or incorrect postcodes. This may need to be fixed by hand.
-
-
-``` {r}
-# Count of ACHD patients in each SA2 area
-sa2_freq <- as.data.frame(table(location_sa2$SA2_NAME))
-# Rename columns
-names(sa2_freq) <- c('SA2_NAME', 'ACHD_Count')
-#Check spread
-hist(sa2_freq$ACHD_Count, breaks=50)
-
-```
-
-``` {r}
-
-# Import SA2 Lookup table
-sa2_Table_Builder <- read.csv("./achd-dissertation/EDA/output/sa2_table_builder.csv")
-
-```
-
-``` {r}
-
-# Join ACHD freqs number with area level predictors for some correlations
-area.data <- left_join(sa2_Table_Builder, sa2_freq, by = c('sa2_area' = 'SA2_NAME'))
-
-```
-
-
-
 
 
 
