@@ -51,7 +51,10 @@ cARIA_AUS <- rbind(cARIA_left, cARIA_right)
 # Filter for only NSW AREAs, sort aphabeitcally
 cARIA_NSW <- cARIA_AUS %>%
                 filter(State == "NSW") %>%
-                arrange(NAME) # not sure this is working
+                mutate_at("NAME", as.character) %>%
+                mutate_at("State", as.character) %>%
+                mutate_at("Postcode", as.character)
+                
 
 # Check how many individual SA2 areas are in the dataset
 cARIA_NSW %>%
@@ -59,6 +62,34 @@ cARIA_NSW %>%
 
 ```
 
+``` {r}
+write.csv(cARIA_NSW, "./achd-dissertation/EDA/output/cARIA_NSW.csv")
+saveRDS(cARIA_NSW, file = "./achd-dissertation/EDA/output/cARIA_NSW.rds")
+
+```
 
 This is many more distinct names for SA2 than in the Census data, need to check over th cARIA document and see what the NAME columns means
+
+``` {r}
+sa2_lookup <- read.csv("./achd-dissertation/EDA/output/sa2_lookup.csv") %>%
+#             ------------Clean up the data-----------------  
+              # select subrub, postcode and sa2 name columns
+              select(LOCALITY_NAME,POSTCODE,SA2_NAME) %>% 
+              # Convert postcode to character
+              mutate_at("POSTCODE", as.character) %>%    
+              # Convert suburb name to character
+              mutate_at("LOCALITY_NAME", as.character)  
+
+```
+
+``` {r}
+print('Variables and data types')
+sapply(sa2_lookup, class)
+```
+
+
+``` {r}
+cARIA_sa2 <- left_join(cARIA_NSW, sa2_lookup, by = c("NAME" = "LOCALITY_NAME", 
+                                                     "Postcode" = "POSTCODE"))
+```
 

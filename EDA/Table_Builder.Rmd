@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = '../..')
 
 library(dplyr)
+library(lubridate)
 ```
 
 ## Function For importing Table Builder data 
@@ -96,7 +97,7 @@ childcare <-  childcare_cat %>%
 names(childcare) <- c('sa2_area','childcare')
 
 # add to data set
-sa2.data2 <- merge(sa2.data, childcare, by = 'sa2_area')
+sa2.data2 <- left_join(sa2.data, childcare, by = 'sa2_area')
 
 ``` 
 __employment__
@@ -115,7 +116,7 @@ employ <- employ_cat %>%
 names(employ) <- c('sa2_area','employ')
 
 # add to data set
-sa2.data3 <- merge(sa2.data2, employ, by = 'sa2_area')
+sa2.data3 <- left_join(sa2.data2, employ, by = 'sa2_area')
 
 ``` 
 __overcrowding__
@@ -136,7 +137,7 @@ overcrowding <- overcrowding_cat %>%
 names(overcrowding) <- c('sa2_area','oc_positive', 'oc_negative')
 
 # add to data set
-sa2.data4 <- merge(sa2.data3, overcrowding, by = 'sa2_area')
+sa2.data4 <- left_join(sa2.data3, overcrowding, by = 'sa2_area')
 
 ```
 __single parents__
@@ -155,7 +156,7 @@ single_parent <- single_parent_cat %>%
 names(single_parent) <- c('sa2_area','sp_male','sp_female','sp_total')
 
 # add to data set
-sa2.data5 <- merge(sa2.data4, single_parent, by = 'sa2_area')
+sa2.data5 <- left_join(sa2.data4, single_parent, by = 'sa2_area')
 ```
 
 __students__
@@ -173,7 +174,7 @@ student <- student_cat %>%
 names(student) <- c('sa2_area','student')
 
 # add to data set
-sa2.data6 <- merge(sa2.data5, student, by = 'sa2_area')
+sa2.data6 <- left_join(sa2.data5, student, by = 'sa2_area')
 
 
 ```
@@ -194,13 +195,11 @@ names(age_cat) <- c('sa2_area','age0','age10',
                     'age80','age90','age100')
 
 # add to data set
-sa2.data7 <- merge(sa2.data6, age_cat, by = 'sa2_area')
+sa2.data7 <- left_join(sa2.data6, age_cat, by = 'sa2_area')
 
 ```
 
-__Add SA2 Codes to dataset__
-
-
+__Add SA Codes to dataset__
 ``` {r}
 # Load the list of ASGS SA2 area names and codes
 SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv')
@@ -208,10 +207,11 @@ SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv')
 # Filter for NSW and select onyl SA2 associated columns
 SA2_nsw <- SA2_aus %>%
             filter(STATE_NAME_2016 == "New South Wales") %>%
-            select(SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016)
+            select(SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016,
+                   SA3_CODE_2016, SA3_NAME_2016, SA4_CODE_2016, SA4_NAME_2016)
 
 # Add the SA2 area codes to the new dataset
-sa2.data8 <- merge(sa2.data7, SA2_nsw, by.x = 'sa2_area', 'SA2_NAME_2016')
+sa2.data8 <- left_join(sa2.data7, SA2_nsw, by = c('sa2_area' = 'SA2_NAME_2016'))
 
 ```
 
@@ -225,14 +225,55 @@ missing.record
 
 ```
 
+__Hospital Travel Time Data__
 
+This data contains the distance between each SA2 area in australia and each hospital in australia. This obviously contains much more data than we need, so we can filter it to look at only SA2 areas in NSW and NSW hospitals with an ACHD service.
+
+``` {r}
+# import the hospital travel times data
+htt <- read.csv('./hospital_TT/duration_sa2_hospitals.csv') %>%
+#         ------------Clean up the data-------------------------  
+          # select columns, sa2 code and ACHD locations          
+          select(SA2_5DIG16, time_to_646, time_to_755, time_to_152, 
+                 time_to_683, time_to_737, time_to_979) %>%
+          # rename locations to something understandable
+          rename("time_to_orange" = time_to_646,
+                 "time_to_nowra" = time_to_755,
+                 "time_to_canberra" = time_to_152,
+                 "time_to_port" = time_to_683,
+                 "time_to_rpa" = time_to_737,
+                 "time_to_westmead" = time_to_979,
+                 "SA2_5DIGITCODE_2016" = SA2_5DIG16) %>%
+          # calculate the shortest travel time to an achd clinic
+          mutate(shortest_time = pmin(time_to_orange,time_to_nowra,time_to_canberra,
+                                     time_to_port,time_to_rpa,time_to_westmead))
+```
+
+``` {r}
+#merge the travel time data with the area level dataset
+sa2.data9 <- left_join(sa2.data8, htt, by = 'SA2_5DIGITCODE_2016') %>%
+             # Convert the numeric data to duration data (in seconds)
+             mutate(time_to_orange = duration(time_to_orange, "seconds"),
+                    time_to_nowra = duration(time_to_nowra, "seconds"),
+                    time_to_canberra = duration(time_to_canberra, "seconds"),
+                    time_to_port = duration(time_to_port, "seconds"),
+                    time_to_rpa = duration(time_to_rpa, "seconds"),
+                    time_to_westmead = duration(time_to_westmead, "seconds"),
+                    shortest_time = duration(shortest_time, "seconds"),)
+```
 
 ``` {r}
 # Final table
-knitr::kable(head(sa2.data))
+knitr::kable(head(sa2.data9))
 
-#write.csv(sa2.data8, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
+#save as csv and r data file
+#write.csv(sa2.data9, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
+#saveRDS(sa2.data9, file = "./achd-dissertation/EDA/output/sa2_table_builder.rds")
 
+```
+
+``` {r}
+test <- readRDS(file = "./achd-dissertation/EDA/output/sa2_table_builder.rds")
 ```
 
 
