@@ -1,0 +1,300 @@
+---
+title: "Table Builder EDA"
+author: "Calum Nicholson"
+date: "08/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# set 'data' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+library(dplyr)
+library(lubridate)
+```
+
+## Function For importing Table Builder data 
+
+Table Builder data was downloaded on 5 Jun 2020. The data is located in Dissertation/data/Table_builder_SA2_NSW.
+
+Each table row in this folder is an SA2 area for NSW, with the columns describing a certain demographic. This function will import the data and remove the unneccesary rows.
+
+``` {r}
+# Function to import and clean SA2 Tables
+read.SA2.table <-function (filename, path = "./Table_builder_SA2_NSW/") {
+  
+#    ```
+#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #    areas, and converts it to a dataframe
+#    
+#    INPUT
+#    filename:       string, name of the file with extension
+#    path:           string, path to the file
+#    
+#    OUTPUT
+#    sa2.df:         dataframe, Table builder data with excess removed
+#    ```
+  
+    #load table
+    age <- readLines(paste(path,filename, sep=''))
+    
+    #tidy the data
+    age <- age[-(1:9)] #remove header
+    age <- age[-2] #remove SA2 label
+    age <- age[-(581:588)] #remove footer
+    
+    #load data into dataframe
+    sa2.df <- read.table(text = age, sep =",", header = TRUE, stringsAsFactors = FALSE)
+    sa2.df
+}
+
+# age
+head(read.SA2.table('age_10P.csv'))
+
+```
+
+## Creating Area level variables
+
+Going though each of the tables, adding variables into a final dataset, sa2.data.
+
+__total population, sex and country of birth__
+
+``` {r}
+
+# load some tables
+sex <- read.SA2.table('sex.csv')
+COB <- read.SA2.table('COB.csv')
+
+# SA2 area names
+sa2_area <- sex$SEXP.Sex
+
+# Total population in each area
+total_pop <- sex$Total
+
+# Percentages in each area
+male <- ( sex$Male / total_pop ) * 100
+female <- ( sex$Female / total_pop ) * 100
+overseas <- ( COB$COB_overseas / total_pop ) * 100
+
+# combine variables
+sa2.data <- data.frame(sa2_area, total_pop, male, female, overseas)
+head(sa2.data)
+
+```
+__childcare__
+
+``` {r}
+# load data
+childcare_cat <- read.SA2.table('child_care.csv')
+
+# percentage of population engaged in childcare
+childcare <-  childcare_cat %>%
+                mutate(sum = rowSums(.[3:5])) %>%
+                mutate(perc = sum / Total * 100) %>%
+                select(CHCAREP.Unpaid.Child.Care, perc)
+
+# update column names
+names(childcare) <- c('sa2_area','childcare')
+
+# add to data set
+sa2.data2 <- left_join(sa2.data, childcare, by = 'sa2_area')
+
+``` 
+__employment__
+
+``` {r}
+# load data
+employ_cat <- read.SA2.table('employment_status.csv')
+
+# percentage of unemployed in each area
+employ <- employ_cat %>%
+              mutate(sum = rowSums(.[5:6])) %>%
+              mutate(perc = sum / Total * 100) %>%
+              select(LFSP.Labour.Force.Status, perc)
+
+# update column names
+names(employ) <- c('sa2_area','employ')
+
+# add to data set
+sa2.data3 <- left_join(sa2.data2, employ, by = 'sa2_area')
+
+``` 
+
+__overcrowding__
+``` {r}
+# load data
+overcrowding_cat <- read.SA2.table('overcrowding.csv')
+
+# Overcrowding measured by number of spare rooms, or number of rooms needed in household
+# Percentage who have spare rooms (positive), and percentage who need more rooms (negative)
+overcrowding <- overcrowding_cat %>%
+              mutate(positive = rowSums(.[7:10])) %>%
+              mutate(negative = rowSums(.[2:5])) %>%
+              mutate(perc_pos = positive / Total * 100) %>%
+              mutate(perc_neg = negative / Total * 100) %>%
+              select(HOSD.Housing.Suitability, perc_pos, perc_neg)
+
+# update column names
+names(overcrowding) <- c('sa2_area','oc_positive', 'oc_negative')
+
+# add to data set
+sa2.data4 <- left_join(sa2.data3, overcrowding, by = 'sa2_area')
+
+```
+
+__single parents__
+``` {r}
+# load data
+single_parent_cat <- read.SA2.table('single_parent.csv')
+
+#Percentage of single parent households; male, female and total
+single_parent <- single_parent_cat %>%
+              mutate(sp_male = Male.lone.parent / Total * 100) %>%
+              mutate(sp_female = Female.lone.parent / Total * 100) %>%
+              mutate(sp_total = sp_male + sp_female) %>%  
+              select(SLPP.Sex.of.Lone.Parent, sp_male, sp_female, sp_total)
+
+# update column names
+names(single_parent) <- c('sa2_area','sp_male','sp_female','sp_total')
+
+# add to data set
+sa2.data5 <- left_join(sa2.data4, single_parent, by = 'sa2_area')
+```
+
+__students__
+``` {r}
+# load data
+student_cat <- read.SA2.table('student_status.csv')
+
+# percentage of students in each area
+student <- student_cat %>%
+              mutate(student_sum = rowSums(.[3:4])) %>%
+              mutate(student_perc = student_sum / Total * 100) %>% 
+              select(STUP.Full.Time.Part.Time.Student.Status, student_perc)
+
+# update column names
+names(student) <- c('sa2_area','student')
+
+# add to data set
+sa2.data6 <- left_join(sa2.data5, student, by = 'sa2_area')
+
+
+```
+
+__age__
+``` {r}
+# load data
+#add age groups for each area
+age_cat <- read.SA2.table('age_10P.csv')
+
+# age categories, in 10 year age groups.
+age_cat <- select(age_cat, AGE10P...Age.in.Ten.Year.Groups:X100.years.and.over)
+
+# update column names
+names(age_cat) <- c('sa2_area','age0','age10',
+                    'age20','age30','age40',
+                    'age50','age60','age70',
+                    'age80','age90','age100')
+
+# add to data set
+sa2.data7 <- left_join(sa2.data6, age_cat, by = 'sa2_area')
+
+```
+
+__Add SA Codes to dataset__
+``` {r}
+# Load the list of ASGS SA2 area names and codes
+SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv')
+
+# Filter for NSW and select onyl SA2 associated columns
+SA2_nsw <- SA2_aus %>%
+            filter(STATE_NAME_2016 == "New South Wales") %>%
+            select(SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016,
+                   SA3_CODE_2016, SA3_NAME_2016, SA4_CODE_2016, SA4_NAME_2016)
+
+# Add the SA2 area codes to the new dataset
+sa2.data8 <- left_join(sa2.data7, SA2_nsw, by = c('sa2_area' = 'SA2_NAME_2016'))
+
+```
+
+This new dataset has one less record than before, suggesting something has been dropped from 'sa2.data'. Check what record is missing now, we can see that 'Total' is missing, we don't need this one for this dataset
+
+
+``` {r}
+missing.record <- anti_join(sa2.data7, sa2.data8)
+
+missing.record
+
+```
+__Add the GCC code into the dataset__
+
+The GCC codes distinguish between 'Greater Sydney' and 'Rest of NSW' and the ACT, allowing for more granular analysis if neccesart.
+``` {r}
+# Load the list of GCC names
+GCC <- read.csv('./achd-dissertation/EDA/output/sa2_GCC_name.csv') %>%
+          select(SA2_NAME16, GCC_NAME16) %>%
+          rename("sa2_area" = SA2_NAME16)
+
+sa2.data9 <- left_join(sa2.data8, GCC, by = 'sa2_area')
+
+```
+
+
+__Hospital Travel Time Data__
+
+This data contains the distance between each SA2 area in australia and each hospital in australia. This obviously contains much more data than we need, so we can filter it to look at only SA2 areas in NSW and NSW hospitals with an ACHD service.
+
+``` {r}
+# import the hospital travel times data
+htt <- read.csv('./hospital_TT/duration_sa2_hospitals.csv') %>%
+#         ------------Clean up the data-------------------------  
+          # select columns, sa2 code and ACHD locations          
+          select(SA2_5DIG16, time_to_646, time_to_755, time_to_152, 
+                 time_to_683, time_to_737, time_to_979) %>%
+          # rename locations to something understandable
+          rename("time_to_orange" = time_to_646,
+                 "time_to_nowra" = time_to_755,
+                 "time_to_canberra" = time_to_152,
+                 "time_to_port" = time_to_683,
+                 "time_to_rpa" = time_to_737,
+                 "time_to_westmead" = time_to_979,
+                 "SA2_5DIGITCODE_2016" = SA2_5DIG16) %>%
+          # calculate the shortest travel time to an achd clinic
+          mutate(shortest_time = pmin(time_to_orange,time_to_nowra,time_to_canberra,
+                                     time_to_port,time_to_rpa,time_to_westmead))
+```
+
+``` {r}
+#merge the travel time data with the area level dataset
+sa2.data10 <- left_join(sa2.data9, htt, by = 'SA2_5DIGITCODE_2016') %>%
+             # Convert the numeric data to duration data (in seconds)
+             mutate(time_to_orange = duration(time_to_orange, "seconds"),
+                    time_to_nowra = duration(time_to_nowra, "seconds"),
+                    time_to_canberra = duration(time_to_canberra, "seconds"),
+                    time_to_port = duration(time_to_port, "seconds"),
+                    time_to_rpa = duration(time_to_rpa, "seconds"),
+                    time_to_westmead = duration(time_to_westmead, "seconds"),
+                    shortest_time = duration(shortest_time, "seconds"),)
+```
+
+``` {r}
+# Final table
+knitr::kable(head(sa2.data9))
+
+#save as csv and r data file
+#write.csv(sa2.data10, "./achd-dissertation/EDA/output/sa2_table_builder.csv")
+#saveRDS(sa2.data10, file = "./achd-dissertation/EDA/output/sa2_table_builder.rds")
+
+```
+
+``` {r}
+test <- readRDS(file = "./achd-dissertation/EDA/output/sa2_table_builder.rds")
+```
+
+
+
+
+
+
+
+

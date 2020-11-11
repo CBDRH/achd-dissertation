@@ -1,0 +1,1118 @@
+---
+---
+title: "Clinic Engagement"
+author: "Calum Nicholson"
+date: "08/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+study_folder <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(scales)
+```
+
+``` {r warning = FALSE}
+#import ACHD data
+achd <- readRDS(file = paste(study_folder, 'output/rpah_analysis_dataset_2020-10-18.rds', sep=""))
+```
+
+# Selecting the sample to measure clinic engagement from  
+
+We will need to select a sample of patients from the ACHD database with a few requirements to ensure we can make a reasonable measure of clinic enagement:  
+
+__1. Timeframe needs to be taken from a point where clinic data has been measured consistently (i.e. retrospective data from before the database was built will not work well)__  
+      
+The database was put together in 2012 and you can see there are a lot of people with their first clinic visit around this time. This may be an artefact of data collection beginning rather than all of these patients being actually new. So we should exclude clinics before this time.  
+
+``` {r}
+#Plot the distribution of the first clinic visit for each person in the dataset.
+ggplot(achd, aes(x=first_clinic_2000)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.25), labels = percent) +
+      scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+      theme(axis.text.x = element_text(angle = 90)) +
+      labs(title = "Distribution of First Clinic Visit after 01/01/2000", 
+           y = "Percent", 
+           x = "Year")
+```
+
+__2. Need to distinguish between ACHD clinic attendances and others__  
+      
+From the above graph it suggest that we should exclude clinic data from before 2012 if we want accurate measurement of clinic engagement. An important variable in the clinic data is `seen_by` which tells us which clinician the clinic record is related to. We can use this to ensure that our clinic engagement meausre is only measuring relevant ACHD clinics. The graph below explores how consistently this variable was recorded over time. We can see a lot of missing information between 2012 and 2015 and that it really came into use around 2015. To use the records between 2012 - 2015 we will need to clean the dataset a little bit.  
+
+``` {r}
+# recreate the clinic level dataset
+fup_2000 <- achd %>% select(achd_id, clinics_2000, death) %>% unnest(clinics_2000)
+```
+
+``` {r}
+# plot a cumulative frequency for the NA values in the seen_by variable
+fup_2000 %>% select(clinic_date, seen_by) %>% 
+             arrange(clinic_date) %>% 
+             filter(is.na(seen_by)) %>% 
+             group_by(clinic_date) %>% 
+             summarise(n = n()) %>%
+             ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+             scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+             labs(title = "Cumulative Frequency of records missing `Seen_by` information", 
+             y = "Percent", 
+             x = "Year")
+
+
+```
+
+These two graphs suggests a sampling period of 01/01/2012 - 01/10/2020 after some cleaning. The most recent clinic date is 17/09/2020.  
+
+__3. Make a distinctions between ACHD cardiology visits and other visits__  
+The `seen_by` variable has 7 levels:
+- "DC" - David Celermajer's private ACHD clinic
+- "RC" - Rachael Cordina's private ACHD clinic
+- "SHC" - Sydney Heart Centre's ACHD clinic
+- "Outreach" - Rural ACHD clinics
+- "OtherCard" - Seen by another cardiologist
+- "Other" - Other Clinic
+- NA - missing
+      
+the DC, RC, SHC, Outreach and OtherCard are all counted as an "ACHD clinics" the others are records of inpatient visits, correspondances and visits to other clinics or visit for scans (eg echo, mri). Each clinic also has a comment in `clinic_comment` that can provide some more information. A lot of the missing information that is still here can be attributed to the correct category
+
+``` {r}
+fup_2000 %>% filter(clinic_date >= as.Date('01/01/2012', format='%d/%m/%Y')) %>%
+                        ggplot(aes(x = seen_by)) + geom_bar() +
+                                     labs(title = "Distribution of ACHD clinics", 
+                                     y = "Number of Clincs", 
+                                     x = "Type of Clinics")
+```
+
+
+We will detect certain phrases from the clinic comment variable and assign those clinics to the correct category. After this process there are 856 clinics that are either `Other`. These are encounters that are not considered encounters with the ACHD service.
+
+``` {r}
+fup_2000_clean <- fup_2000  %>%
+  
+           # Select all clinics from 01/01/2012 to now  
+           filter(clinic_date >= as.Date('01/01/2012', format='%d/%m/%Y')) %>%
+           # Clean some of the "seen_by" variable by detecting phrases in the clinic comments
+                          # All comments with DC, celermajer marked as seen by DC  
+           mutate(seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "dc"), "DC"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "celermajer"), "DC"),
+                          # All comments with RC, cordina, marked as seen by RD
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "rc"), "RC"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "cordina"), "RC"),
+                          # All comments with nowra, orange, canberra or portm marked as outreach
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "nowra"), "Outreach"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "nowara"), "Outreach"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "orange"), "Outreach"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "canberra"), "Outreach"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "portm"), "Outreach"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "outreach"), "Outreach"),
+                          # Labelling the other cardiologists
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "dennis"), "OtherCard"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "chard"), "OtherCard"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "tanous"), "OtherCard"),                                            seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "chard"), "OtherCard"),
+                          # All comments with SCH, sydney heart centre or achd clinic marked as SHC
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "shc"), "SHC"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "sydney heart centre"), "SHC"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "achd clinic"), "SHC"),
+                          # Labelling other clinics                              
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "inpatient"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "correspondence"), "Other"),                                        seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "report"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "letter"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "email"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "chart"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "cancel"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "echo"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "deceased"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "in hospital"), "Other"),
+                  seen_by = replace(seen_by, str_detect(str_to_lower(clinic_comment), "emergency"), "Other"),
+                  seen_by = replace(seen_by, clinic_comment == "PH clinic", "Other"),
+                  seen_by = replace(seen_by, is.na(seen_by), "Other"))
+```
+
+``` {r}
+# Clinics to exclude from the dataset
+fup_2000_clean %>% select(achd_id, clinic_date, clinic_comment, seen_by) %>%
+             filter(seen_by == "Other") %>%
+             nrow()
+```
+
+__4. Need to consider deaths in the sampling period__  
+      
+We will need to filter for people who are alive throughout the sampling period, can use the "death' variable for this  
+
+
+``` {r}
+# number of patients who have died
+achd %>% filter(death == 1) %>% select(death) %>% nrow()
+```
+
+__5. Final set up clinics for analysis__
+
+"Other" clinics to be excluded
+
+``` {r}
+fup_2000_clean %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     filter(seen_by == "Other") %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of Other clinic visits", 
+                     y = "Percent", 
+                     x = "Year")
+```
+
+``` {r}
+fup_filtered <- fup_2000_clean %>%
+                    # Remove clinic that are not RPAH ACHD clinic (Other) + records from patients who passed away
+                    filter(seen_by != "Other") %>% filter(death == 0) %>%
+                    # Remove the death variable after filtering
+                    select(-death)
+```
+
+This leaves 6293 clinic records between 01/01/2012 and 01/10/2020, with patients seen at an ACHD clinics at RPAH (private, public or outreach) who are still alive. These clinics are heavily weighted to 'DC', over half of all clinics are these.
+
+``` {r}
+# Number of clinics for analysis
+fup_filtered %>% nrow()
+```
+
+``` {r}
+# Distribtuion of clinic types
+ggplot(data = fup_filtered, aes(x = seen_by)) + geom_bar() +
+             labs(title = "Distribution of ACHD clinics", 
+             y = "Number of Clincs", 
+             x = "Type of Clinics")
+```
+
+_How have total clinic visits increased over time?_
+
+``` {r}
+# plot a cumulative frequency for clinic visits - All visits
+fup_filtered %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of clinic visits", 
+                     y = "Percent", 
+                     x = "Year")
+
+# plot a cumulative frequency for clinic visits - DC visits
+fup_filtered %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     filter(seen_by == "DC") %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of DC clinic visits", 
+                     y = "Percent", 
+                     x = "Year")
+
+# plot a cumulative frequency for clinic visits - RC visits
+fup_filtered %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     filter(seen_by == "RC") %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of RC clinic visits", 
+                     y = "Percent", 
+                     x = "Year")
+
+# plot a cumulative frequency for clinic visits - SHC visits
+fup_filtered %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     filter(seen_by == "SHC") %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of SHC clinic visits", 
+                     y = "Percent", 
+                     x = "Year")
+
+# plot a cumulative frequency for clinic visits - Outreach visits
+fup_filtered %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     filter(seen_by == "Outreach") %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of Outreach clinic visits", 
+                     y = "Percent", 
+                     x = "Year")
+
+# plot a cumulative frequency for clinic visits - Other ACHD visits
+fup_filtered %>% select(clinic_date, seen_by) %>% 
+                     arrange(clinic_date) %>%
+                     filter(seen_by == "OtherCard") %>%
+                     group_by(clinic_date) %>% 
+                     summarise(n = n()) %>%
+                     ggplot(aes(x = clinic_date)) + stat_ecdf(geom = "line") +
+                     scale_x_date(date_breaks = "1 year", labels = date_format("%Y")) +
+                     labs(title = "Cumulative Frequency of Other ACHD visits", 
+                     y = "Percent", 
+                     x = "Year")
+
+```
+
+Add the filtered clinics back into the dataset
+``` {r}
+achd.2 <- achd %>%
+          select(-clinics, -no_clinics, -first_clinic, -last_clinic, -date_diff, -age_first_clinic, -age_last_clinic,
+                 -clinics_2000, -no_clinics_2000, -first_clinic_2000, -last_clinic_2000, -date_diff_2000, -age_first_clinic_2000,
+                 -age_last_clinic_2000) %>%
+          nest_join(fup_filtered, by = 'achd_id') %>%
+          mutate(
+              # Number of clinics for each patient
+              no_clinics = map_dbl(map(fup_filtered, ~ .$clinic_date), length)) %>%
+          # filter patients with no clinic visits
+          filter(no_clinics > 0) %>%
+          mutate(
+              # First clinic date for each patient
+              first_clinic = as_date(map_dbl(fup_filtered, ~ min(.$clinic_date))),
+              # Last clinic date for each patient
+              last_clinic = as_date(map_dbl(fup_filtered, ~ max(.$clinic_date))), 
+              # Number of days between first and last clinic
+              date_diff = as.duration(first_clinic %--% last_clinic) / dyears(1),
+               )
+```
+
+__6. EDA of the clinic visit__
+
+_Number of Clinics_
+``` {r, echo = FALSE}
+p <- ggplot(achd.2, aes(x=no_clinics)) +
+      geom_bar(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.4), labels = percent) +
+      scale_x_continuous(breaks = seq(0,20,1)) +
+      labs(title = "Distribution of Number of Clinic Visits", 
+           y = "Percent", 
+           x = "Number of Visits")
+
+p
+```
+
+_Number of Clinics - by disease severity_
+``` {r, echo = FALSE}
+b.labs <- c("Simple", "Moderate", "Complex", "Unknown")
+names(b.labs) <- c(1,2,3,4)
+
+p + scale_y_continuous(limits = c(0,0.15), labels = percent) +
+    facet_wrap(vars(bethesda_code),
+               labeller = labeller(bethesda_code = b.labs))
+```
+
+_First Clinic Date_
+``` {r, echo = FALSE}
+p <- ggplot(achd.2, aes(x=first_clinic)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.25), labels = percent) +
+      labs(title = "Distribution of First Clinic Visit", 
+           y = "Percent", 
+           x = "Year")
+
+p
+```
+
+``` {r, echo = FALSE}
+b.labs <- c("simple", "Moderate", "Complex", "Unknown")
+names(b.labs) <- c(1,2,3,4)
+
+p + scale_y_continuous(limits = c(0,0.05), labels = percent) +
+    facet_wrap(vars(bethesda_code),
+               labeller = labeller(bethesda_code = b.labs))
+```
+
+
+_Last Clinic Date_
+``` {r, echo = FALSE}
+p <- ggplot(achd.2, aes(x=last_clinic)) +
+        geom_histogram(aes( y = ..count../sum(..count..))) +
+        scale_y_continuous(limits = c(0,0.25), labels = percent) +
+        labs(title = "Distribution of Last Clinic Visit", 
+             y = "Percent", 
+             x = "Year")
+
+p
+```
+
+``` {r, echo = FALSE}
+b.labs <- c("simple", "Moderate", "Complex", "Unknown")
+names(b.labs) <- c(1,2,3,4)
+
+p + scale_y_continuous(limits = c(0,0.05), labels = percent) +
+    facet_wrap(vars(bethesda_code),
+               labeller = labeller(bethesda_code = b.labs))
+```
+
+
+__Length of time in ACHD care__
+
+i.e. time between first clinic date and last clinic date
+
+``` {r}
+p <- ggplot(achd.2, aes(x=date_diff)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.3), labels = percent) +
+      labs(title = "Distribution of Years between first and last visit", 
+           y = "Percent", 
+           x = "years")
+
+p
+```
+
+``` {r, echo = FALSE}
+b.labs <- c("simple", "Moderate", "Complex", "Unknown")
+names(b.labs) <- c(1,2,3,4)
+
+p + scale_y_continuous(limits = c(0,0.05), labels = percent) +
+    facet_wrap(vars(bethesda_code),
+               labeller = labeller(bethesda_code = b.labs))
+```
+
+# Determining Exposure Time
+
+We have determined a sampling period from 01/01/2012 to 01/10/2020. For each patient we will need to determine an exposure time from which we can then develop a clinic engagement measure. This will be the time at which a patient has been attending the clinic, so their first clinic visit, after 01/01/2012 will begin the exposure time, and it will end on 01/10/2020.
+
+
+# Measuring Gaps in Clinics Visits
+
+The measure of clinic engagement simply calculated the time between each clinic visit (and the time between the last clinic visit and the end of the sampling period).
+
+We can count a gap as any time period that is longer than the recommended time between visits, then we can count the number of gaps, or the presence/absence of a gap, as our measure of clinic engagment
+
+_Get a test patient to calculate the gaps from_
+``` {r}
+#reminder of the 'clinics' data
+achd.2 %>% filter(achd_id == 1101) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             select(clinic_date) %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+#use this as a test example
+test <- achd.2 %>% filter(achd_id == 1101) %>% .$fup_filtered
+test <- as.data.frame(test)
+```
+
+_Caluclate the gaps for 1 patient_
+``` {r}
+test <- test %>% 
+                  # Calculate the time difference between each clinic visit in days
+          mutate(gap = clinic_date - lag(clinic_date)) %>%
+          add_row(gap = as.Date('01/10/2020', format='%d/%m/%Y') - last(.[['clinic_date']])) %>%
+          # Display the gap in years
+          mutate(
+            gap_years = time_length(gap, "years"),
+            # Display the gap in months
+            gap_months = time_length(gap, 'months'))
+
+test %>%     select(clinic_date, gap, gap_years, gap_months) %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+# Calculate the average length of a gap in days
+mean(test$gap, na.rm = TRUE)
+# Calculate the standard deviation of the gaps in days
+sd(test$gap, na.rm = TRUE)
+# Calculate the longest gap in days
+max(test$gap, na.rm = TRUE)
+# Calculate the number of gaps longer than 6 months
+sum(test$gap_months > 6, na.rm = TRUE)
+```
+
+_Calculate the gaps for the whole dataset_
+``` {r warning = FALSE}
+# Calculate the gaps for each patient
+achd.3 <- achd.2 %>%
+                    # Calculate the time passed between each clinic
+            mutate(fup_filtered = map(fup_filtered, 
+                                      ~ mutate(.x, gap = clinic_date - lag(clinic_date),
+                                                   # Display the gap in years
+                                                   gap_years = time_length(gap, "years"),
+                                                   # Display the gap in months
+                                                   gap_months = time_length(gap, "months")
+                                              )),
+                   # Calculate the time since last visit
+                   last_gap = map_dbl(fup_filtered, ~ as.Date('01/10/2020', format='%d/%m/%Y') - last(.[['clinic_date']])),
+                   # Calculate the longest gap in days
+                   max_gap = map_dbl(fup_filtered, ~ max(.$gap,na.rm = TRUE)),
+                   # Calculate the average length of a gap in days
+                   mean_gap = map_dbl(fup_filtered, ~ mean(.$gap, na.rm = TRUE)),
+                   # Calculate the standard deviation of the gaps in days
+                   sd_gap = map_dbl(fup_filtered, ~ sd(.$gap, na.rm = TRUE)),
+                   # Calculate the number of gaps longer than 3 months
+                   gap_3m = map_dbl(fup_filtered, ~ sum(.$gap_months > 3, na.rm = TRUE)),
+                   # Calculate the number of gaps longer than 6 months
+                   gap_6m = map_dbl(fup_filtered, ~ sum(.$gap_months > 6, na.rm = TRUE)),
+                   # Calculate the number of gaps longer than 1 year
+                   gap_1yr = map_dbl(fup_filtered, ~ sum(.$gap_years > 1, na.rm = TRUE)),
+                   # Calculate the number of gaps longer than 2 years
+                   gap_2yr = map_dbl(fup_filtered, ~ sum(.$gap_years > 2, na.rm = TRUE)),
+                   # Calculate the number of gaps longer than 3 years
+                   gap_3yr = map_dbl(fup_filtered, ~ sum(.$gap_years > 3, na.rm = TRUE)),
+                   )%>%
+            # Convert the gaps into time periods
+            mutate(last_gap = as.period(last_gap, unit = 'day'),
+                   max_gap = replace(max_gap, max_gap == -Inf, NA), # Recode infinity to NA
+                   max_gap = as.period(max_gap, unit = 'day'),
+                   mean_gap = as.period(as.period(as.integer(.$mean_gap), unit = 'day')),
+                   sd_gap = as.period(as.period(as.integer(.$sd_gap), unit = 'day'))
+                   )
+              
+```
+
+_Check the test patient again_
+``` {r}
+achd.3 %>% filter(achd_id == 1101) %>% 
+           .$fup_filtered %>% 
+           as.data.frame() %>%
+           select(clinic_date, gap, gap_years, gap_months) %>%
+           knitr::kable() %>%
+           kableExtra::kable_styling()
+
+```
+
+_check a sample of the dataset_
+``` {r}
+achd.3 %>% filter(no_clinics > 5) %>%
+            select(achd_id, bethesda_code, no_clinics, last_gap, max_gap, mean_gap, sd_gap, 
+                   gap_3m, gap_6m, gap_1yr, gap_1yr, gap_2yr, gap_3yr) %>%
+            head() %>% 
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+```
+
+## Gaps in Care EDA
+
+__Time Since Last Visit__  
+
+_For how many patients, is the gap between the last clinic and the end of the sampling period the largest gap?_  
+
+When developing the measures, it seemed like the last gap was reguarly the largest gap, so lets have a look whether this is the case.  
+  
+The graph below suggests that this is true for a little less that half of the patients in the sample. What does does suggest?   
+- Many patients have not been seen by the clinic in a long time  
+- Many of these patients have moved, and are not seen by out clinics  
+
+``` {r echo = FALSE}
+achd.3 %>% mutate(last_max_gap = ( max_gap < last_gap ) | (is.na(max_gap)) ) %>%
+              ggplot(aes(x = last_max_gap)) + geom_bar() +
+              scale_y_continuous(expand = c(0,0), limits = c(0,1050)) +
+              labs(title = "Patients whose last gap in clinic attendance is their largest")
+
+achd.3 %>% mutate(last_max_gap = ( max_gap < last_gap ) | (is.na(max_gap)) ) %>%
+              ggplot(aes(x = last_max_gap)) + geom_bar() +
+              scale_y_continuous(expand = c(0,0), limits = c(0,1050)) +
+              labs(title = "Patients whose last gap in clinic attendance is their largest") +
+              facet_wrap(vars(bethesda_code),
+              labeller = labeller(bethesda_code = b.labs))
+```
+
+_looking at this 'last gap', how many patients are "lost to follow up"?_
+
+Take a look at the distribution of the last gap, for all patients and by disease severity
+
+``` {r}
+achd.3 %>% ggplot(aes(x=as.numeric(last_gap, 'years'))) + 
+           geom_histogram(aes( y = ..count../sum(..count..))) +
+           scale_x_continuous(breaks = seq(0,9,1), limits = c(0,9)) +
+           scale_y_continuous(labels = percent) +
+           labs(title = "Distribution of the last clinic gap", 
+           y = "Count", 
+           x = "years")
+```
+
+``` {r}
+achd.3 %>% ggplot(aes(x=as.numeric(last_gap, 'years'))) + 
+           geom_histogram() +
+           scale_x_continuous(breaks = seq(0,9,1), expand = c(0,0), limits = c(0,9)) +
+           scale_y_continuous(expand = c(0,0), limits = c(0,150)) +
+           labs(title = "Distribution of the last clinic gap", 
+           y = "Count", 
+           x = "years") +
+           facet_wrap(vars(bethesda_code),
+                      labeller = labeller(bethesda_code = b.labs))
+```
+
+To determine lost to follow up, we will flag all patients who have not been seen in more that 3 years
+
+``` {r}
+achd.3 <- achd.3 %>% mutate(ltf = ifelse( ( last_gap > as.period(3, 'years') ), 
+                                          TRUE, FALSE))
+                          
+```
+
+
+``` {r}
+achd.3 %>% ggplot(aes(x=ltf)) + 
+           geom_bar(aes( y = ..count../sum(..count..))) +
+           scale_y_continuous(labels = percent) +
+           labs(title = "Patients who are lost to follow up", x = "", y = "Percent") 
+
+achd.3 %>% ggplot(aes(x=ltf)) + 
+           geom_bar(aes( y = ..count../sum(..count..))) +
+           scale_y_continuous(labels = percent) +
+           labs(title = "Patients who are lost to follow up", x = "", y = "Percent") +
+           facet_wrap(vars(bethesda_code),
+                      labeller = labeller(bethesda_code = b.labs))
+```
+
+__Looking at gaps between clinic visit__
+
+_Number of Gaps_ 
+
+Look at the number 1, 2 and 3 year gaps for the whole population, and split by severity.
+
+To look at this measure we will need to filter out people who only have one clinic visit, as they will have no gaps in care
+
+1. number of 1 year gaps
+``` {r}
+p <- achd.3 %>% filter(no_clinics > 1) %>%
+     ggplot(aes(x=gap_1yr)) + 
+     geom_bar() +
+     labs(title = "Number of 1+ year Gaps between clinic attendances", x = "Number of Gaps")           
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+```
+
+2. number of 2 year gaps  
+``` {r}
+p <- achd.3 %>% filter(no_clinics > 1) %>%
+     ggplot(aes(x=gap_2yr)) + 
+     geom_bar() +
+     labs(title = "Number of 2+ year Gaps between clinic attendances", x = "Number of Gaps")           
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+```
+
+3. number of 3 year gaps  
+``` {r}
+p <- achd.3 %>% filter(no_clinics > 1) %>%
+     ggplot(aes(x=gap_3yr)) + 
+     geom_bar() +
+     labs(title = "Number of 3+ year Gaps between clinic attendances", x = "Number of Gaps")           
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+```
+
+_Creating a binary outcome for Gaps in care_  
+
+This will be quite a strict outcome variable to measure clinic attendances. If a person has a single gap in care that is longer than the recommended time between appointments we will consider this as a failure to comply with guidelines on clinic attendance. Following the Bethesda Classification:
+
+- Complex: "seen regularly" - will use 12 months    
+- Moderate: "seen periodically" - will use 2 years    
+- Simple: "cared for in the general medical community" - will use 3 years  
+
+``` {r}
+achd.3 <- achd.3 %>% mutate(gap = ifelse( ( bethesda_code == 1 & gap_3yr != 0 ) |
+                                          ( bethesda_code == 2 & gap_2yr != 0 ) |
+                                          ( bethesda_code == 3 & gap_1yr != 0 ) |
+                                          ( bethesda_code == 4 & gap_3yr != 0 ), 
+                                          TRUE, FALSE))
+                          
+```
+
+
+``` {r}
+p <- achd.3 %>% filter(no_clinics > 1) %>%
+           ggplot(aes(x=gap)) +
+           geom_bar()
+p 
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+```
+
+# Measuring Visit Constancy
+
+This measure will divide the time period of interest into smaller time periods (we will use 6 months for the first test) and counts the number of periods with at least 1 visit. Measure will display as a percentage of the number of period with a visit, by the number of total periods.
+
+``` {r}
+#revist our test patient 1101
+achd.test <- achd.3 %>% filter(achd_id == 1101) %>% select (first_clinic, last_clinic, fup_filtered)
+
+achd.test.clinics <- achd.test %>% .$fup_filtered
+achd.test.clinics <- as.data.frame(achd.test.clinics)
+```
+
+__Creating the interval of interest and dividing it into 6 month periods__
+
+We want to divide each year into 6 month periods, based off the first clinic date and the end of the sampling period.
+
+``` {r}
+# find the 6 month date (i.e. 01-Jan or 01-Jul), before the first clinic date
+start <- floor_date(achd.test$first_clinic, unit = "6 months")
+# find the 6 month date (i.e. 01-Jan or 01-Jul), after the last clinic date
+end <- ceiling_date(achd.test$last_clinic, unit = "6 months")
+# break the period up into 6 month periods
+breaks <- seq(start, end, "6 months")
+# create intervals between each break
+intervals <- interval(breaks, lead(breaks))
+# remove the last interval with the NA value
+intervals <- intervals[-length(intervals)]
+
+intervals
+```
+
+__Check whether there is a clinic visit within each 6 month period, and calculate the percentage of intervals with visits in them__
+``` {r}
+# Clinic dates for the test patients
+dates <- achd.test.clinics$clinic_date
+
+# create a vector for testing the visits
+visit_vector = sapply(intervals, function(x) any(dates %within% x))
+
+#calculate the visit constancy
+visit_constancy <- sum(visit_vector) / length(visit_vector)
+visit_vector
+visit_constancy
+```
+
+``` {r}
+# Make a function for creating the interval periods
+create.intervals <- function(start, end, period) {
+            # break the period up into 6 month periods
+            breaks <- seq(floor_date(start, unit = period), ceiling_date(end, unit = period), by = period)
+            # create intervals between each break
+            intervals <- interval(breaks, lead(breaks))
+            # remove the last interval with the NA value
+            intervals <- intervals[-length(intervals)]
+            intervals
+            }
+
+#test with the same sample dates
+create.intervals(achd.test$first_clinic, achd.test$last_clinic, "6 months")
+```
+
+``` {r}
+# Make a function for calculating the visit constancy
+calc.visit.constancy <- function(dates, intervals) {
+            # create a vector for testing the visits
+            visit_vector = sapply(intervals, function(x) any(dates %within% x))
+            #calculate the visit constancy
+            visit_constancy <- sum(visit_vector) / length(visit_vector)
+            visit_constancy
+            }
+
+#test with the sample dates
+calc.visit.constancy(achd.test.clinics$clinic_date,
+                     create.intervals(achd.test$first_clinic, achd.test$last_clinic, "6 months"))
+```
+
+
+
+Test the visit constancy measure with some other examples, see if we can find something that doesn't equal 100%
+``` {r}
+#test patient 2019
+achd.test <- achd.3 %>% filter(achd_id == 2019) %>% select (first_clinic, last_clinic, fup_filtered)
+achd.test.clinics <- achd.test %>% .$fup_filtered
+achd.test.clinics <- as.data.frame(achd.test.clinics)
+```
+
+``` {r}
+#the clinic dates
+achd.test.clinics$clinic_date
+
+#the intervals
+as.data.frame(create.intervals(achd.test$first_clinic, achd.test$last_clinic, "6 months"))
+
+#test with the sample dates
+calc.visit.constancy(achd.test.clinics$clinic_date,
+                     create.intervals(achd.test$first_clinic, achd.test$last_clinic, "6 months"))
+```
+
+__Calcualte the visit constancy measures for the entire dataset__
+
+``` {r}
+achd.4 <- achd.3 %>% mutate(
+                     interval_start_6m = floor_date(first_clinic, unit = "6 months"),
+                     interval_end_6m = floor_date(last_clinic, unit = "6 months"),
+                     vc_6m = map_dbl(fup_filtered, ~ calc.visit.constancy(.$clinic_date,
+                                                                          create.intervals(.$clinic_date[1],
+                                                                          .$clinic_date[length(.$clinic_date)],
+                                                                                           "6 months"))),
+                     interval_start_1yr = floor_date(first_clinic, unit = "1 year"),
+                     interval_end_1yr = floor_date(last_clinic, unit = "1 year"),
+                     vc_1yr = map_dbl(fup_filtered, ~ calc.visit.constancy(.$clinic_date,
+                                                                          create.intervals(.$clinic_date[1],
+                                                                          .$clinic_date[length(.$clinic_date)],
+                                                                                           "1 year"))),
+                     interval_start_2yr = floor_date(first_clinic, unit = "2 years"),
+                     interval_end_2yr = floor_date(last_clinic, unit = "2 years"),
+                     vc_2yr = map_dbl(fup_filtered, ~ calc.visit.constancy(.$clinic_date,
+                                                                          create.intervals(.$clinic_date[1],
+                                                                          .$clinic_date[length(.$clinic_date)],
+                                                                                           "2 years"))),
+                     interval_start_3yr = floor_date(first_clinic, unit = "3 years"),
+                     interval_end_3yr = floor_date(last_clinic, unit = "3 years"),
+                     vc_3yr = map_dbl(fup_filtered, ~ calc.visit.constancy(.$clinic_date,
+                                                                          create.intervals(.$clinic_date[1],
+                                                                          .$clinic_date[length(.$clinic_date)],
+                                                                                           "3 years")))
+                     )
+```
+
+
+``` {r}
+achd.4 %>% filter(no_clinics > 5) %>%
+            select(achd_id, bethesda_code, no_clinics, first_clinic, last_clinic, 
+                   vc_6m, vc_1yr, vc_2yr, vc_3yr) %>% 
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+```
+
+## Visit Constancy EDA
+
+Looking at the distribution of the measures below, the 6 month measure is skewed heavily to the left, with very few people reaching 100%, or close to. The 1, 2 and 3 year measures have a more even spread, and enough people who achieve 100% constancy to try and develop a binary measure.
+
+__6 month constancy__
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>% 
+           ggplot(aes(x = vc_6m)) + 
+           geom_histogram() +
+           scale_x_continuous(label = percent) +
+           labs(title = '6 month visit constancy',
+                x = '')
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+
+```
+
+__1 year constancy__
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>% 
+           ggplot(aes(x = vc_1yr)) + 
+           geom_histogram() +
+           scale_x_continuous(label = percent) +
+           labs(title = '1 year visit constancy',
+                x = '')
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+
+```
+
+
+
+__2 year constancy__
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>% 
+           ggplot(aes(x = vc_2yr)) + 
+           geom_histogram() +
+           scale_x_continuous(label = percent) +
+           labs(title = '2 year visit constancy',
+                x = '')
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+
+```
+
+__3 year constancy__
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>% 
+           ggplot(aes(x = vc_3yr)) + 
+           geom_histogram() +
+           scale_x_continuous(label = percent) +
+           labs(title = '3 year visit constancy',
+                x = '')
+
+p
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+
+```
+
+_Developing a binary outcome for visit constancy_
+
+As with Gaps in Care, this will be quite a strict outcome variable to measure clinic attendances. If a person's constancy is less that 100%, we will consider this as a failure to comply with guidelines on clinic attendance. Again, following the Bethesda Classification:
+
+- Complex: "seen regularly" - will use 12 months    
+- Moderate: "seen periodically" - will use 2 years    
+- Simple: "cared for in the general medical community" - will use 3 years  
+
+
+
+``` {r}
+achd.4 <- achd.4 %>% mutate(vc = ifelse(  ( bethesda_code == 1 & vc_3yr == 1 ) |
+                                          ( bethesda_code == 2 & vc_2yr == 1 ) |
+                                          ( bethesda_code == 3 & vc_1yr == 1 ) |
+                                          ( bethesda_code == 4 & vc_3yr == 1 ), 
+                                          TRUE, FALSE))
+                          
+```
+
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>%
+           ggplot(aes(x=vc)) +
+           geom_bar()
+
+p 
+
+p + facet_wrap(vars(bethesda_code),
+        labeller = labeller(bethesda_code = b.labs))
+```
+
+# How do these measures compare with each other?
+
+Looking at Loss to Follow up, Gaps in Care and Visit Constancy
+
+##Gaps in Care vs Visit Constancy
+
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>%
+           filter(ltf == FALSE) %>%
+           ggplot(aes(x=gap_6m, y=vc_6m)) +
+           geom_point() +
+           scale_y_continuous(limits = c(0,1))
+p
+
+p +  facet_wrap(vars(bethesda_code),
+                labeller = labeller(bethesda_code = b.labs))
+```
+
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>%
+           ggplot(aes(x=gap_1yr, y=vc_1yr)) +
+           geom_point() +
+           scale_y_continuous(limits = c(0,1))
+p
+
+p +  facet_wrap(vars(bethesda_code),
+                labeller = labeller(bethesda_code = b.labs))
+```
+
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>%
+           ggplot(aes(x=gap_2yr, y=vc_2yr)) +
+           geom_point() +
+           scale_y_continuous(limits = c(0,1))
+ 
+p
+
+p + facet_wrap(vars(bethesda_code),
+               labeller = labeller(bethesda_code = b.labs))
+
+
+```
+
+
+``` {r}
+p <- achd.4 %>% filter(no_clinics > 1) %>%
+           ggplot(aes(x=gap_3yr, y=vc_3yr)) +
+           geom_point() +
+           scale_y_continuous(limits = c(0,1))
+ 
+p
+
+p + facet_wrap(vars(bethesda_code),
+               labeller = labeller(bethesda_code = b.labs))
+
+
+```
+
+
+Gaps in Care and Visit Constancy do not correlate very well. Lets look at a few examples to understand why this might be
+
+__3023__
+
+Has 6 gaps longer than 1 year, but also has a 100% constancy rate.
+
+``` {r}
+achd.4 %>% filter(gap_1yr == 6 & vc_1yr == 1) %>% select(achd_id, bethesda_code, ltf, gap, vc)
+```
+
+Looking at the actual clinic dates, we can see a very consistent rates of clinic visit, there is at leats one visit in each year, often within the first quarter of each year. Despite this the gaps are all slight longer than 1 year, so they are marked as gaps in care
+
+
+``` {r}
+#reminder of the 'clinics' data
+achd.4 %>% filter(achd_id == 3023) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+```
+
+__3354__
+
+Has 5 gaps longer than 1 year, but also has a 100% constancy rate.
+
+``` {r}
+achd.4 %>% filter(gap_1yr == 5 & vc_1yr == 1) %>% select(achd_id, bethesda_code, ltf, gap, vc)
+```
+
+Again, this patient has a visit in every year, but a few of the visits are above 365 days and are thus counted as a gap
+
+``` {r}
+#reminder of the 'clinics' data
+achd.4 %>% filter(achd_id == 3354) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+```
+
+Now look at opposite cases, with few gaps but worse constancy. Firstly, there is 100% agreement for 0 gaps, and 100% constancy in all cases. Such that the binary variables should be in agreement.
+
+``` {r}
+achd.4 %>% filter(ltf == FALSE) %>%
+           filter(gap_1yr == 0 & vc_1yr < 1) %>% 
+           nrow()
+
+achd.4 %>% filter(ltf == FALSE) %>%
+           filter(gap_2yr == 0 & vc_2yr < 1) %>% 
+           nrow()
+
+achd.4 %>% filter(ltf == FALSE) %>%
+           filter(gap_3yr == 0 & vc_3yr < 1) %>% 
+           nrow()
+```
+
+``` {r}
+achd.4 %>% filter(ltf == FALSE) %>%
+           filter(gap_1yr == 1 & vc_1yr < 0.5) %>% 
+           select(achd_id, bethesda_code, no_clinics, ltf, gap, vc, gap_1yr, vc_1yr)
+```
+
+
+__4352__
+
+This case is quite interesting, there is one gap in care above 1 year, but the gap is quite large. When measuring constancy, this gap is counted over a few intervals of missed appointments, so more details is given.
+
+``` {r}
+achd.4 %>% filter(achd_id == 4352) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+```
+
+__2862__
+
+Again, we have one large gap between appointments, but the constancy measure counts this as multiple missed intervals
+
+```{r}
+
+achd.4 %>% filter(achd_id == 2862) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+
+```
+
+__1355__
+
+Again, we have one large gap between appointments, but the constancy measure counts this as multiple missed intervals
+
+```{r}
+
+achd.4 %>% filter(achd_id == 1355) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+
+```
+
+``` {r}
+achd.4 %>% filter(ltf == FALSE) %>%
+           filter(gap_2yr == 1 & vc_2yr < 0.75) %>% 
+           select(achd_id, bethesda_code, no_clinics, ltf, gap, vc, gap_2yr, vc_2yr)
+```
+
+
+__1860__
+
+Again, we have one large gap between appointments, but the constancy measure counts this as multiple missed intervals
+
+```{r}
+
+achd.4 %>% filter(achd_id == 1860) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+
+```
+
+__3074__
+
+Again, we have one large gap between appointments, but the constancy measure counts this as multiple missed intervals
+
+```{r}
+
+achd.4 %>% filter(achd_id == 3074) %>% .$fup_filtered %>%
+             as.data.frame() %>%
+             knitr::kable() %>%
+             kableExtra::kable_styling()
+
+
+```
+
+
+__Summary__
+
+Gaps in Care and Visit Constacy, for the same time length disagree in certain cases. It seems that in these cases, the Gaps in Care measure it too coarse to provide information:
+- When Constancy is high and Gaps are High: Often there a many clinic visits for the patient, and they are quite consistent, however a gap that is a few days over the cut off (i.e. 375 days for a 1 year gap) will still be counted. In this case a patient can have many gaps in care but still show a good rate of clinic attendance.  
+- When Constancy is low and Gaps are Low: Often in these cases there are few clinic visits, with one long gap in care. The Gaps in care measure counts this as one one, where as the constancy measure will count this as many missed intervals.
+
+## How do these measure relate to loss to follow up
+
+``` {r}
+achd.4 %>% filter(no_clinics > 1) %>%
+      ggplot(aes(x = as.numeric(last_gap, 'years'), y = vc_6m)) + geom_point()
+
+achd.4 %>% filter(no_clinics > 1) %>%
+      ggplot(aes(x = as.numeric(last_gap, 'years'), y = gap_6m)) + geom_point()
+
+```
+
+
+``` {r}
+achd.4 %>% 
+      ggplot(aes(x = ltf, y = vc_6m)) + geom_boxplot()
+
+achd.4 %>% 
+      ggplot(aes(x = ltf, y = gap_1yr)) + geom_boxplot()
+
+```
+
+
+

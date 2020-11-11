@@ -1,0 +1,58 @@
+---
+title: "hospital_TT"
+author: "Calum Nicholson"
+date: "09/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# set 'data' folder as root directory
+knitr::opts_knit$set(root.dir = '/Users/calumnicholson/Documents/OneDrive - UNSW/Dissertation/data/')
+
+library(dplyr)
+```
+
+``` {r}
+htt <- read.csv('./hospital_TT/duration_sa2_hospitals.csv')
+```
+
+``` {r}
+htt_details <- read.csv('./hospital_tt/myhospitals-contact-details.csv')
+```
+
+``` {r}
+NSW_sa2 <- read.csv('./achd-dissertation/EDA/output/sa2_table_builder.csv') %>%
+                select(SA2_5DIGITCODE_2016) %>%
+                rename('SA2_5DIG16' = SA2_5DIGITCODE_2016)
+```
+
+``` {r}
+htt_achd_NSW <- htt %>%
+                  select(SA2_5DIG16, time_to_646, time_to_755, time_to_152, 
+                         time_to_683, time_to_737, time_to_979) %>%
+                  inner_join(NSW_sa2, by = 'SA2_5DIG16') %>%
+                  rename("time_to_orange" = time_to_646,
+                         "time_to_nowra" = time_to_755,
+                         "time_to_canberra" = time_to_152,
+                         "time_to_port" = time_to_683,
+                         "time_to_rpa" = time_to_737,
+                         "time_to_westmead" = time_to_979) %>%
+                  mutate(shortest_time = pmin(time_to_orange,time_to_nowra,time_to_canberra,
+                                             time_to_port,time_to_rpa,time_to_westmead))
+        
+```
+
+``` {r}
+htt_achd_dist <- htt_achd_NSW %>% select(-SA2_5DIG16, -shortest_time)
+
+test <- lapply(htt_achd_dist,which.min)
+
+
+
+
+```
+
+
+
+

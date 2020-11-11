@@ -1,0 +1,95 @@
+---
+title: "Cardiac ARIA"
+author: "Calum Nicholson"
+date: "13/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# set 'data' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+library(dplyr)
+library(xlsx)
+```
+
+## Import Cardiac ARIA
+
+``` {r}
+cARIA <- read.xlsx2('./cardiac_aria.xlsx', 1)
+```
+
+The dataset is split into two halfs, side by side, so this needs to be cleaned into a tidy format
+
+``` {r}
+head(cARIA)
+
+```
+
+## Cleaning
+
+```{r}
+#remove blank columns
+cARIA_2 <- cARIA %>%
+             select(-(5:6))
+
+#select the first 4 columns, first half of the data
+cARIA_left <-  cARIA_2 %>%
+                 select(1:4)
+
+#select the last 4 columns, second half of the data
+cARIA_right <- cARIA_2 %>%
+                 select(5:8)
+
+#Give both datasets the same columns names
+names(cARIA_right) <- names(cARIA_left)
+
+# Bind the two datasets together in the same columns
+cARIA_AUS <- rbind(cARIA_left, cARIA_right)
+
+# Filter for only NSW AREAs, sort aphabeitcally
+cARIA_NSW <- cARIA_AUS %>%
+                filter(State == "NSW") %>%
+                mutate_at("NAME", as.character) %>%
+                mutate_at("State", as.character) %>%
+                mutate_at("Postcode", as.character)
+                
+
+# Check how many individual SA2 areas are in the dataset
+cARIA_NSW %>%
+  summarise(n_distinct(NAME))
+
+```
+
+``` {r}
+write.csv(cARIA_NSW, "./achd-dissertation/EDA/output/cARIA_NSW.csv")
+saveRDS(cARIA_NSW, file = "./achd-dissertation/EDA/output/cARIA_NSW.rds")
+
+```
+
+This is many more distinct names for SA2 than in the Census data, need to check over th cARIA document and see what the NAME columns means
+
+``` {r}
+sa2_lookup <- read.csv("./achd-dissertation/EDA/output/sa2_lookup.csv") %>%
+#             ------------Clean up the data-----------------  
+              # select subrub, postcode and sa2 name columns
+              select(LOCALITY_NAME,POSTCODE,SA2_NAME) %>% 
+              # Convert postcode to character
+              mutate_at("POSTCODE", as.character) %>%    
+              # Convert suburb name to character
+              mutate_at("LOCALITY_NAME", as.character)  
+
+```
+
+``` {r}
+print('Variables and data types')
+sapply(sa2_lookup, class)
+```
+
+
+``` {r}
+cARIA_sa2 <- left_join(cARIA_NSW, sa2_lookup, by = c("NAME" = "LOCALITY_NAME", 
+                                                     "Postcode" = "POSTCODE"))
+```
+

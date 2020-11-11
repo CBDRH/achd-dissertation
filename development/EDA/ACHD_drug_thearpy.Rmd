@@ -1,0 +1,57 @@
+---
+title: "ACHD)_Rx"
+author: "Calum Nicholson"
+date: "19/09/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(lubridate)
+library(ggplot2)
+```
+
+``` {r}
+# load Follow Up Status dataset
+Rx <- read.csv(paste(ACHD_path, 'Table_exports/DRUG THERAPY.csv', sep="")) %>%
+#               ------------Clean up the data-------------------------
+                # select columns for id and medications
+                select(person_id, dt_id, dt_generic, dt_dose, dt_start_date, dt_stop_date) %>%
+                # rename columns
+                rename( 'achd_id' = person_id) %>%
+                #remove time stamp from date columns
+                mutate_at("dt_start_date", str_remove, pattern = " 0:00:00") %>% 
+                mutate_at("dt_stop_date", str_remove, pattern = " 0:00:00") %>% 
+                # Convert to date format
+                mutate_at("dt_start_date",as.Date, format='%d/%m/%Y') %>% 
+                mutate_at("dt_stop_date",as.Date, format='%d/%m/%Y') %>%
+                # make all drug names lowercase
+                mutate_at("dt_generic", str_to_lower)
+```
+
+``` {r}
+length(Rx$dt_generic)
+length(unique(Rx$dt_generic))
+
+
+```
+
+
+
+
+
+
+
+
+
