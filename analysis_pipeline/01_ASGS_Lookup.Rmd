@@ -36,7 +36,7 @@ SA2_locality_names <- SA2_locality_NSW %>%
 # Load the list of ASGS SA2 area names and codes
 SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv') %>%
             select(STATE_NAME_2016, SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016,
-                   SA3_CODE_2016, SA3_NAME_2016, SA4_CODE_2016, SA4_NAME_2016)
+                   SA3_CODE_2016, SA3_NAME_2016, SA4_CODE_2016, SA4_NAME_2016, GCCSA_NAME_2016)
 
 # filter for NSW and select the column with SA2 names
 SA2_nsw <- SA2_aus %>%
@@ -59,10 +59,15 @@ _This means where a locality is covered by two or more SA2s the locality has bee
 This method may mean that some SA2 areas have been excluded because the locality has been placed into the area where most of its population is.
 
 ``` {r}
-# join the SA3 and SA4 area codes to the look up table
+# join the SA3, SA4 and GCC area codes to the look up table
 ASGS_lookup <- left_join(SA2_locality_NSW, SA2_aus, by = c("SA2_MAINCODE" = "SA2_MAINCODE_2016")) %>%
-                    select(-LOCALITY_ID, -LOCALITY_TYPE, -STATE_NAME_2016, -SA2_NAME_2016)
-
+                    select(-LOCALITY_ID, -LOCALITY_TYPE, -STATE_NAME_2016, -SA2_NAME_2016) %>%
+                    rename("GCC_NAME" = GCCSA_NAME_2016,
+                           "SA2_5DIGIT" = SA2_5DIGITCODE_2016,
+                           "SA3_CODE" = SA3_CODE_2016,
+                           "SA3_NAME" = SA3_NAME_2016,
+                           "SA4_CODE" = SA4_CODE_2016,
+                           "SA4_NAME" = SA4_NAME_2016)
 ```
 
 ``` {r}
@@ -72,16 +77,14 @@ sapply(ASGS_lookup, function(x) sum(is.na(x)))
 ASGS_lookup %>% filter(is.na(POSTCODE))
 ```
 
-
 ``` {r}
 # Select Nessecary columns from lookup table
 SA2_lookup_NSW <- SA2_locality_NSW %>%
                    select(LOCALITY_NAME, POSTCODE, SA2_MAINCODE, SA2_NAME)
 
 # write the filtered lookup table to the output folder
-# write.csv(SA2_lookup_NSW, "./achd-dissertation/EDA/output/sa2_lookup.csv")
-# write.csv(ASGS_lookup, "./achd-dissertation/EDA/output/ASGS_lookup.csv")
-
+ write.csv(SA2_lookup_NSW, "./achd-dissertation/analysis_pipeline/output/sa2_lookup.csv")
+ write.csv(ASGS_lookup, "./achd-dissertation/analysis_pipeline/output/ASGS_lookup.csv")
 
 ```
 

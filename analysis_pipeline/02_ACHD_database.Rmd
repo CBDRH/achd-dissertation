@@ -1,0 +1,1055 @@
+---
+title: "ACHD_ADMIN"
+author: "Calum Nicholson"
+date: "18/06/2020"
+output: html_document
+---
+
+__To do__
+Select data for patients with correct address recorded  
+Check through values for clinic_comment, what do they all mean how can we organise them? 
+Check how removing missing data affects the demographics.
+
+
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+study_folder <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(scales)
+```
+
+__Create a 'Person-Level' Dataset__
+
+The ACHD database contains a number of tables, joined by the person identified "person_id". These will be joined into a single person level datasat. The key tables are:
+    -    ADMIN: names, addresses, contact details, dob, sex.  
+    -    MAIN: contains the minimum dataset, with diagnosis information and who their clincian is (i,e. DC, RC or SHC).  
+    -    DEMOGRAPHICS: This contains basic demographics information. A lot of this table in incomplete, however there is useful information in country of birth and indigenous status.  
+    -    FOLLOW UP STATUS: This is a 'clinic level' dataset, where each record is a clinic visit, with the date of the visit and a comment about which clinic is was (i.e. which private doctor, or public clinic or outreach clinic)     
+    -    CLINIC VISIT: Similar to the follow up table but contained more detailed info (i.e bp and heart rate). has only been collecting info for the past two years and only for DCs patients  
+    -    DEATH: Recording deceased patients, taken from NDI data linkage.
+
+
+_ADMIN_
+``` {r}
+# Load ADMIN table from ACHD database
+ADMIN <- read.csv(paste(ACHD_path, 'Table_exports/ADMIN.csv', sep="")) %>%
+#         ------------Clean up the data-------------------------  
+          # select columns
+          dplyr::select(person_id, adm_sex, adm_date_of_birth,                                   
+                 adm_suburb_locality, adm_postcode, adm_state_abbreviation) %>%
+          # rename columns
+          rename('achd_id' = person_id,                                                   
+                 'sex' = adm_sex,
+                 'dob' = adm_date_of_birth,
+                 'suburb' = adm_suburb_locality,
+                 'postcode' = adm_postcode,
+                 'state' = adm_state_abbreviation) %>%
+          # remove timestamp from visit date
+          mutate_at("dob", str_remove, pattern = " 0:00:00") %>%
+          # Convert clinic dates to Date format
+          mutate_at("dob", as.Date, format='%d/%m/%Y') %>% 
+          # Calculate age on 01 Jan 2020
+          mutate(age = as.period(dob %--% as.Date("01/01/2020", format='%d/%m/%Y'))) %>%
+          # Flag for ages greater than 18 years old
+          mutate(age_flag = ifelse(as.numeric(age, "years") >= 18, 1, 0)) %>%
+          # Remove whitespace from suburb name
+          mutate_at("suburb", str_trim, side = "both") %>% 
+          # Change all suburbs to uppercase
+          mutate_at("suburb", str_to_upper, locale = "en") %>% 
+          # Convert suburb from to character format
+          mutate_at("suburb", as.character) %>%     
+          # Convert postcode to character format
+          mutate_at("postcode", as.character)                                              
+```
+
+__Selecting for records with valid addresses__
+
+Check the dataset for missing postcodes, states, overseas or interstate addresses. a few of the records have some missing data but we can safely infer what the missing information is and fix them up:  
+      -    achd_id 910 has subrub of CLAREVILLE, but is missing the postcode, CLAREVILLE only matches to one SA2 area in the lookup table so we can safely assume the postcode is the same as the lookup table: 2107  
+      -    achd_ids 11, 1385, 2792m, 2034 4023, 4732, 4883, 4892 the state field missing, but the postcode and suburb are in NSW, so we can add the state as NSW  
+
+
+``` {r}
+ADMIN <- ADMIN %>%
+                mutate(
+                  postcode = replace(postcode, achd_id == 910, 2107),
+                  state = replace(state, achd_id == 4732, "NSW"),
+                  state = replace(state, achd_id == 4883, "NSW"),
+                  state = replace(state, achd_id == 4892, "NSW"),
+                  state = replace(state, achd_id == 1385, "NSW"),
+                  state = replace(state, achd_id == 2792, "NSW"),
+                  state = replace(state, achd_id == 2034, "NSW"),
+                  state = replace(state, achd_id == 11, "NSW"),
+                  state = replace(state, achd_id == 4023, "NSW"),
+                       ) %>%
+                mutate(
+                  valid_address = ifelse( ( suburb != "" & suburb != "OVERSEAS" & suburb != "-") &
+                                            (postcode != "" & !is.na(postcode)) &
+                                            ( state == "NSW" | state == "ACT"), 1, 0)
+                       )
+```
+
+There are some typos in the address fields from the dataset, resulting in 230 records that need to be checked by hand.
+
+__Cleaning Addresses__
+
+The addresses above have some typos, they will be cross references with the sa2 lookup table, first checking the suburb, then the postcode to see if an obvious typo can be identified. If there is no reasonable solution, the record will be marked as an invalid address
+
+``` {r}
+ADMIN <- ADMIN %>%
+                mutate(
+                  postcode = replace(postcode, achd_id == 4688, 2112),
+                  suburb = replace(suburb, achd_id == 4675, 'SYDNEY'),
+                  postcode = replace(postcode, achd_id == 327, 2203),
+                  valid_address = replace(valid_address, achd_id == 3360, 0),
+                  postcode = replace(postcode, achd_id == 2672, 2006),
+                  postcode = replace(postcode, achd_id == 2065, 2047),
+                  postcode = replace(postcode, achd_id == 2120, 2046),
+                  postcode = replace(postcode, achd_id == 1361, 2006),
+                  postcode = replace(postcode, achd_id == 34, 2045),
+                  postcode = replace(postcode, achd_id == 2524, 2198),
+                  suburb = replace(suburb, achd_id == 4107, 'DULWICH HILL'),
+                  postcode = replace(postcode, achd_id == 444, 2066),
+                  suburb = replace(suburb, achd_id == 2382, 'TORONTO'),
+                  suburb = replace(suburb, achd_id == 156, 'MOUNT KURING-GAI'),
+                  postcode = replace(postcode, achd_id == 256, 2017),
+                  suburb = replace(suburb, achd_id == 406, 'NORTH ENTRANCE BEACH'),
+                  postcode = replace(postcode, achd_id == 81, 2049),
+                  suburb = replace(suburb, achd_id == 275, 'JAMISON CENTRE'),
+                  postcode = replace(postcode, achd_id == 1259, 2615),
+                  suburb = replace(suburb, achd_id == 4894, 'HELENSBURGH'),
+                  suburb = replace(suburb, achd_id == 78, 'ROBERTSON'),
+                  postcode = replace(postcode, achd_id == 1583, 2193),
+                  suburb = replace(suburb, achd_id == 2695, 'SYLVANIA'),
+                  suburb = replace(suburb, achd_id == 2639, 'WAVERLY'),
+                  valid_address = replace(valid_address, achd_id == 2302, 0),
+                  postcode = replace(postcode, achd_id == 2019, 2478),
+                  postcode = replace(postcode, achd_id == 2871, 2040),
+                  postcode = replace(postcode, achd_id == 2388, 2006),
+                  postcode = replace(postcode, achd_id == 1973, 2006),
+                  postcode = replace(postcode, achd_id == 254, 2006),
+                  suburb = replace(suburb, achd_id == 1445, 'FIVE DOCK'),
+                  suburb = replace(suburb, achd_id == 4995, 'NORTHBRIDGE'),
+                  valid_address = replace(valid_address, achd_id == 906, 0),
+                  valid_address = replace(valid_address, achd_id == 4337, 0),
+                  valid_address = replace(valid_address, achd_id == 539, 0),
+                  suburb = replace(suburb, achd_id == 911, 'TRUNDLE'),
+                  postcode = replace(postcode, achd_id == 4001, 2825),
+                  suburb = replace(suburb, achd_id == 5054, 'BERKELEY VALE'),
+                  suburb = replace(suburb, achd_id == 5042, 'DUBBO'),
+                  suburb = replace(suburb, achd_id == 1861, 'CROYDON'),
+                  postcode = replace(postcode, achd_id == 26, 2137),
+                  postcode = replace(postcode, achd_id == 4237, 2585),
+                  postcode = replace(postcode, achd_id == 318, 2006),
+                  postcode = replace(postcode, achd_id == 1094, 2204),
+                  suburb = replace(suburb, achd_id == 4545, 'GREEN VALLEY'),
+                  postcode = replace(postcode, achd_id == 3691, 2006),
+                  valid_address = replace(valid_address, achd_id == 4585, 0),
+                  postcode = replace(postcode, achd_id == 3390, 2261),
+                  postcode = replace(postcode, achd_id == 4272, 2212),
+                  postcode = replace(postcode, achd_id == 4623, 2166),
+                  valid_address = replace(valid_address, achd_id == 2514, 0),
+                  postcode = replace(postcode, achd_id == 2419, 2617),
+                  postcode = replace(postcode, achd_id == 2551, 2006),
+                  valid_address = replace(valid_address, achd_id == 1263, 0),
+                  suburb = replace(suburb, achd_id == 1053, 'DALEYS POINT'),
+                  valid_address = replace(valid_address, achd_id == 1164, 0),
+                  suburb = replace(suburb, achd_id == 1672, 'BELLINGEN'),
+                  suburb = replace(suburb, achd_id == 4917, 'ERSKINEVILLE'),
+                  valid_address = replace(valid_address, achd_id == 4246, 0),
+                  suburb = replace(suburb, achd_id == 876, 'VILLAWOOD'),
+                  postcode = replace(postcode, achd_id == 3605, 2913),
+                  suburb = replace(suburb, achd_id == 876, 'LONDONDERRY'),
+                  postcode = replace(postcode, achd_id == 2870, 2006),
+                  postcode = replace(postcode, achd_id == 4923, 2006),
+                  suburb = replace(suburb, achd_id == 4615, 'WINDERA'),
+                  valid_address = replace(valid_address, achd_id == 1730, 0),
+                  valid_address = replace(valid_address, achd_id == 3239, 0),
+                  suburb = replace(suburb, achd_id == 860, 'BOWNING'),
+                  valid_address = replace(valid_address, achd_id == 593, 0),
+                  suburb = replace(suburb, achd_id == 5180, 'MARRICKVILLE'),
+                  suburb = replace(suburb, achd_id == 2946, 'WOOLLOOMOOLOO'),
+                  valid_address = replace(valid_address, achd_id == 1084, 0),
+                  suburb = replace(suburb, achd_id == 3457, 'LONG BEACH'),
+                  postcode = replace(postcode, achd_id == 3198, 2045),
+                  valid_address = replace(valid_address, achd_id == 4206, 0),
+                  valid_address = replace(valid_address, achd_id == 1269, 0),
+                  suburb = replace(suburb, achd_id == 5058, 'ST HELENS PARK'),
+                  suburb = replace(suburb, achd_id == 3021, 'OXLEY PARK'),
+                  suburb = replace(suburb, achd_id == 629, 'LAKE HAVEN'),
+                  postcode = replace(postcode, achd_id == 832, 2550),
+                  postcode = replace(postcode, achd_id == 1704, 2045),
+                  postcode = replace(postcode, achd_id == 1842, 2006),
+                  valid_address = replace(valid_address, achd_id == 1924, 0),
+                  suburb = replace(suburb, achd_id == 3308, 'KURRI KURRI'),
+                  suburb = replace(suburb, achd_id == 1881, 'DARLING POINT'),
+                  suburb = replace(suburb, achd_id == 2447, 'BAULKHAM HILLS'),
+                  suburb = replace(suburb, achd_id == 2175, 'YAGOONA'),
+                  postcode = replace(postcode, achd_id == 2007, 2204),
+                  postcode = replace(postcode, achd_id == 1559, 2018),
+                  postcode = replace(postcode, achd_id == 2963, 2671),
+                  postcode = replace(postcode, achd_id == 1433, 2528),
+                  postcode = replace(postcode, achd_id == 907, NA),
+                  suburb = replace(suburb, achd_id == 4179, 'ERSKINEVILLE'),
+                  suburb = replace(suburb, achd_id == 1942, 'WOLLSTONECRAFT'),
+                  postcode = replace(postcode, achd_id == 1594, 2006),
+                  suburb = replace(suburb, achd_id == 1446, 'BIDWILL'),
+                  suburb = replace(suburb, achd_id == 3343, 'SYLVANIA'),
+                  postcode = replace(postcode, achd_id == 5175, 2006),
+                  valid_address = replace(valid_address, achd_id == 2605, 0),
+                  valid_address = replace(valid_address, achd_id == 1988, 0),
+                  suburb = replace(suburb, achd_id == 2688, 'MAYFIELD'),
+                  valid_address = replace(valid_address, achd_id == 2281, 0),
+                  postcode = replace(postcode, achd_id == 3644, 2006),
+                  valid_address = replace(valid_address, achd_id == 1404, 0),
+                  postcode = replace(postcode, achd_id == 2919, 2104),
+                  suburb = replace(suburb, achd_id == 4252, 'BRADDON'),
+                  postcode = replace(postcode, achd_id == 3494, 2006),
+                  postcode = replace(postcode, achd_id == 2477, 2161),
+                  postcode = replace(postcode, achd_id == 2694, 2115),
+                  suburb = replace(suburb, achd_id == 4426, 'RYDE'),
+                  postcode = replace(postcode, achd_id == 2550, 2088),
+                  suburb = replace(suburb, achd_id == 1470, 'MARRICKVILLE'),
+                  suburb = replace(suburb, achd_id == 926, 'CAMDEN'),
+                  suburb = replace(suburb, achd_id == 1091, '	WOLLONGONG WEST'),
+                  postcode = replace(postcode, achd_id == 4420, 2006),
+                  suburb = replace(suburb, achd_id == 1153, 'WOOLLOOMOOLOO'),
+                  postcode = replace(postcode, achd_id == 4873, 2536),
+                  suburb = replace(suburb, achd_id == 177, 'WISEMANS FERRY'),
+                  valid_address = replace(valid_address, achd_id == 2445, 0),
+                  suburb = replace(suburb, achd_id == 4509, 'CHIPPING NORTON'),
+                  postcode = replace(postcode, achd_id == 1253, 2211),
+                  valid_address = replace(valid_address, achd_id == 4486, 0),
+                  postcode = replace(postcode, achd_id == 4515, 2528),
+                  suburb = replace(suburb, achd_id == 4740, 'BRIGHTON-LE-SANDS'),
+                  suburb = replace(suburb, achd_id == 3353, 'WOY WOY'),
+                  valid_address = replace(valid_address, achd_id == 1964, 0),
+                  suburb = replace(suburb, achd_id == 3695, 'MOUNT PLEASANT'),
+                  suburb = replace(suburb, achd_id == 2107, 'WAVERTON'),
+                  suburb = replace(suburb, achd_id == 3346, 'MERRYLANDS'),
+                  postcode = replace(postcode, achd_id == 1212, 2062),
+                  postcode = replace(postcode, achd_id == 3125, 2258),
+                  postcode = replace(postcode, achd_id == 1159, 2769),
+                  suburb = replace(suburb, achd_id == 1159, 'THE PONDS'),
+                  valid_address = replace(valid_address, achd_id == 1802, 0),
+                  postcode = replace(postcode, achd_id == 2049, 2155),
+                  postcode = replace(postcode, achd_id == 3194, 2023),
+                  postcode = replace(postcode, achd_id == 1928, 2259),
+                  valid_address = replace(valid_address, achd_id == 1298, 0),
+                  suburb = replace(suburb, achd_id == 3070, 'STRATHFIELD'),
+                  postcode = replace(postcode, achd_id == 2506, 2006),
+                  suburb = replace(suburb, achd_id == 2887, 'STRATHFIELD SOUTH'),
+                  postcode = replace(postcode, achd_id == 1128, 2705),
+                  suburb = replace(suburb, achd_id == 1244, 'SCHOFIELDS'),
+                  postcode = replace(postcode, achd_id == 845, 2010),
+                  postcode = replace(postcode, achd_id == 2353, 2233),
+                  postcode = replace(postcode, achd_id == 1261, 2258),
+                  postcode = replace(postcode, achd_id == 3825, 2234),
+                  postcode = replace(postcode, achd_id == 1110, 2160),
+                  suburb = replace(suburb, achd_id == 1110, 'MERRYLANDS'),
+                  postcode = replace(postcode, achd_id == 4401, 2617),
+                  suburb = replace(suburb, achd_id == 1614, 'INGLEBURN'),
+                  suburb = replace(suburb, achd_id == 3531, 'HUNTERS HILL'),
+                  suburb = replace(suburb, achd_id == 4350, 'QUEANBEYAN'),
+                  valid_address = replace(valid_address, achd_id == 1194, 0),
+                  valid_address = replace(valid_address, achd_id == 3288, 0),
+                  suburb = replace(suburb, achd_id == 4638, 'REDFERN'),
+                  suburb = replace(suburb, achd_id == 5100, 'GREENACRE'),
+                  suburb = replace(suburb, achd_id == 1308, 'CURRANS HILL'),
+                  postcode = replace(postcode, achd_id == 3827, 2008),
+                  postcode = replace(postcode, achd_id == 4637, 2150),
+                  suburb = replace(suburb, achd_id == 4502, 'WOOLLOOMOOLOO'),
+                  postcode = replace(postcode, achd_id == 2850, 2360),
+                  postcode = replace(postcode, achd_id == 2888, 2006),
+                  postcode = replace(postcode, achd_id == 1643, 2129),
+                  suburb = replace(suburb, achd_id == 3988, 'WARRIEWOOD'),
+                  suburb = replace(suburb, achd_id == 4181, 'AMBARVALE'),
+                  suburb = replace(suburb, achd_id == 1280, 'BONNELLS BAY'),
+                  postcode = replace(postcode, achd_id == 1411, 2611),
+                  postcode = replace(postcode, achd_id == 2680, 2130),
+                  suburb = replace(suburb, achd_id == 3537, 'SOUTH GUNDAGAI'),
+                  suburb = replace(suburb, achd_id == 2593, 'ARTARMON'),
+                  postcode = replace(postcode, achd_id == 3503, 2750),
+                  postcode = replace(postcode, achd_id == 2304, 2612),
+                  suburb = replace(suburb, achd_id == 2304, 'CAMPBELL'),
+                  postcode = replace(postcode, achd_id == 4266, 2006),
+                  valid_address = replace(valid_address, achd_id == 3006, 0),
+                  valid_address = replace(valid_address, achd_id == 48, 0),
+                  postcode = replace(postcode, achd_id == 288, 2913),
+                  suburb = replace(suburb, achd_id == 3961, 'GOULBURN'),
+                  postcode = replace(postcode, achd_id == 2595, 2068),
+                  postcode = replace(postcode, achd_id == 5253, 2095),
+                  suburb = replace(suburb, achd_id == 800, 'WAVERLY'),
+                  postcode = replace(postcode, achd_id == 1247, 2580),
+                  suburb = replace(suburb, achd_id == 4580, 'AMBARVALE'),
+                  postcode = replace(postcode, achd_id == 4416, 2077),
+                  suburb = replace(suburb, achd_id == 3832, 'SILVERWATER'),
+                  postcode = replace(postcode, achd_id == 1922, 2557),
+                  postcode = replace(postcode, achd_id == 211, 2232),
+                  postcode = replace(postcode, achd_id == 1771, 2006),
+                  valid_address = replace(valid_address, achd_id == 4002, 0),
+                  suburb = replace(suburb, achd_id == 1977, 'GREENACRE'),
+                  suburb = replace(suburb, achd_id == 2330, 'ORANGE'),
+                  postcode = replace(postcode, achd_id == 1311, 2151),
+                  suburb = replace(suburb, achd_id == 4518, 'CHERRYBROOK'),
+                  suburb = replace(suburb, achd_id == 4686, 'TINGIRA HEIGHTS'),
+                  postcode = replace(postcode, achd_id == 2962, 2902),
+                  postcode = replace(postcode, achd_id == 4161, 2516),
+                  postcode = replace(postcode, achd_id == 4008, 2114),
+                  suburb = replace(suburb, achd_id == 4349, 'TALBINGO'),
+                  postcode = replace(postcode, achd_id == 2937, 2209),
+                  valid_address = replace(valid_address, achd_id == 3096, 0),
+                  postcode = replace(postcode, achd_id == 3802, 2560),
+                  postcode = replace(postcode, achd_id == 5177, 2631),
+                  suburb = replace(suburb, achd_id == 2645, 'WATSONS BAY'),
+                  valid_address = replace(valid_address, achd_id == 2547, 0),
+                  postcode = replace(postcode, achd_id == 3989, 2019),
+                  postcode = replace(postcode, achd_id == 3599, 2207),
+                  suburb = replace(suburb, achd_id == 4535, 'BLUE HAVEN'),
+                  suburb = replace(suburb, achd_id == 4605, 'STRATHFIELD'),
+                  suburb = replace(suburb, achd_id == 5037, 'SADLEIR'),
+                  postcode = replace(postcode, achd_id == 4280, 2010),
+                  suburb = replace(suburb, achd_id == 4544, 'WESTON'),
+                  valid_address = replace(valid_address, achd_id == 4321, 0),
+                  suburb = replace(suburb, achd_id == 4684, 'AMBARVALE'),
+                  postcode = replace(postcode, achd_id == 1012, 2446),
+                  postcode = replace(postcode, achd_id == 4656, 2196),
+                  suburb = replace(suburb, achd_id == 4636, 'ERSKINEVILLE'),
+                  suburb = replace(suburb, achd_id == 4575, 'LEICHHARDT'),
+                  valid_address = replace(valid_address, achd_id == 4366, 0),
+                  suburb = replace(suburb, achd_id == 4793, 'JINDABYNE'),
+                  suburb = replace(suburb, achd_id == 4659, 'FAIRFIELD HEIGHTS'),
+                  suburb = replace(suburb, achd_id == 4472, 'STRATHFIELD'),
+                  postcode = replace(postcode, achd_id == 4452, 2067),
+                  valid_address = replace(valid_address, achd_id == 4422, 0),
+                  suburb = replace(suburb, achd_id == 4618, 'ANNANGROVE'),
+                  suburb = replace(suburb, achd_id == 5024, 'BANKSTOWN'),
+                  valid_address = replace(valid_address, achd_id == 4567, 0),
+                  suburb = replace(suburb, achd_id == 5024, 'SYLVANIA'),
+                  postcode = replace(postcode, achd_id == 4453, 2067),
+                  postcode = replace(postcode, achd_id == 4327, 2060),
+                  suburb = replace(suburb, achd_id == 4803, 'BIRCHGROVE'),
+                  suburb = replace(suburb, achd_id == 5063, 'NICHOLLS'),
+                  suburb = replace(suburb, achd_id == 4783, 'TARRAWANNA'),
+                  suburb = replace(suburb, achd_id == 4924, 'FRENCHS FOREST'),
+                  postcode = replace(postcode, achd_id == 4927, 2067),
+                  suburb = replace(suburb, achd_id == 4955, 'FAIRLIGHT'),
+                  suburb = replace(suburb, achd_id == 5273, 'ST HELENS PARK'),
+                  valid_address = replace(valid_address, achd_id == 240, 0),
+                  postcode = replace(postcode, achd_id == 1538, 2006),
+                  postcode = replace(postcode, achd_id == 876, 2753),
+                  suburb = replace(suburb, achd_id == 1189, 'LONDONDERRY'),
+                  postcode = replace(postcode, achd_id == 1559, 2474),
+                  postcode = replace(postcode, achd_id == 4179, 2043),
+                  suburb = replace(suburb, achd_id == 1091, 'WOLLONGONG WEST'),
+                  suburb = replace(suburb, achd_id == 3503, 'EMU PLAINS'),
+                  postcode = replace(postcode, achd_id == 5024, 2224),
+                  suburb = replace(suburb, achd_id == 4655, 'SYLVANIA'),
+                )
+```
+
+
+
+_MAIN_
+``` {r}
+# Load the MAIN table from the ACHD database
+MAIN <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
+#       ------------Clean up the data-------------------------  
+        # selecting non-dx variables only
+        select(person_id, SHC, DC, adm_RC, adm_Bethesda, adm_Bethesda_Code, FupStatus, Death_Cause, achd.1) %>%
+         rename('achd_id' = person_id,
+               'dx_comment' = achd.1,
+               'RC' = adm_RC,
+               'bethesda_name' = adm_Bethesda,
+               'bethesda_code' = adm_Bethesda_Code,
+               'death' = FupStatus)
+```
+
+
+
+``` {r}
+# Load the MAIN table from the ACHD database
+DX <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
+#       ------------Clean up the data-------------------------  
+        # selecting dx variables only
+        select(person_id, ABNAO, AbnAV, AbnMV, ABNPV, AbnRV, ABNTV, adm_AbnCA, adm_AbnVeins, adm_AbsentPA, adm_ALCAPA, 
+               adm_Aneurism, adm_APwindow, adm_AVfistula, adm_CHB, adm_CorTriatriatum, adm_Gerbodde, 
+               adm_Hemi_truncus,adm_LPA_sling, adm_PAV_Malform, adm_Shones, AoC, AoInterrupt, AR, AS, ASD, 
+               AVSD, BAVD, ccTGA, DEXTROCARDIA, DILV, DIRV, DORV, Ebsteins, EISENMENGERS, FONTAN, HLHS, 
+               LVNONCOMPACT, MAPCAs, Other, PA, PAPVD, PAS, PDA, PFO, PS, SubAS, SubPS, SupraAS, SupraMS,
+               SupraPS, TA, TAPVD, TGA, TOF, TRUNCART, UnkDx, VSD) %>%
+        rename('achd_id' = person_id) %>%
+        # PA and and adm_AbsentPA are the same thing (Pulmonary Atresia or Absent Pulmonary Artery)
+        # combine these into the same variable
+        mutate(combine_PA = ifelse( (adm_AbsentPA != 0 | PA != 0 ), 1, 0)) %>%
+        select(-adm_AbsentPA, -PA)
+
+# Import the lookup table for EPCC codes, remove the old PA diagnoses
+ACHD_to_EPCC <- read.csv('./dx_codes/ACHD_EPCC_coding.csv') %>% 
+                filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA'))
+
+names(DX) <- ACHD_to_EPCC$EPCC.Code[match(names(DX), ACHD_to_EPCC$Variable)]
+
+# Remove the 'achd_id' row from the ACHD to EPCC lookup table
+ACHD_to_EPCC <- filter(ACHD_to_EPCC, !(Variable == "achd_id"))
+```
+
+All of the diagnosis variables code 1 or -1 for true and 0 or NA for untrue. To make it a little easier to read, we will recode -1 to 1 and NA to 0.
+
+The death variable (FupStatus) also codes alive as NA or 0, recode all NA's to 0
+
+``` {r}
+# all the diagnosis variables
+EPCC_codes <- as.character(ACHD_to_EPCC[["EPCC.Code"]])
+dx_names <- as.character(ACHD_to_EPCC[["Adjust.name"]])
+
+# recode the diagnoses to binary
+DX <- DX %>% mutate_at(EPCC_codes,
+                            function(x) replace(x, is.na(x), 0) # recode all na values to 0
+                           ) %>%
+                 mutate_at(EPCC_codes,
+                            function(x) replace(x, x == -1, 1) # recode all -1 values to 1
+                           ) %>%
+                 mutate(no_dx = rowSums(.[,EPCC_codes]))
+
+#Recode the death variable to binary
+MAIN <- MAIN %>% mutate_at('death', 
+                           function(x) replace(x, is.na(x), 0)) # recode all na values to 0)
+                 
+```
+
+in the disease severity code 'bethesda_code'; 4 codes for 'Classification Unknown', there are a few other codes (0,9,NA) that can be cleaned to 4 also
+
+``` {r}
+# recode the classification to unknown
+MAIN <- MAIN %>% mutate_at('bethesda_code',
+                            function(x) replace(x, (is.na(x) | x == 0 | x == 9), 4) # recode all na values to 0
+                           )
+```
+
+Adding label to the EPCC codes. The EPCC codes aren't very readable, so we will add some labels that outline the diangosis names more clearly.
+
+``` {r}
+# Create a named list to use for adding variable labels
+EPCC_to_names <- setNames(dx_names, EPCC_codes)
+
+# Apply label to the diagnosis variables
+library(expss) #for apply_labels
+DX <- do.call(apply_labels, c(list(data = DX), EPCC_to_names))
+```
+
+
+_DEATH_
+``` {r}
+# load the DEATH table from the ACHD database
+DEATH <- read.csv(paste(ACHD_path, 'Table_exports/DEATH.csv', sep="")) %>%
+#        ------------Clean up the data-------------------------  
+         # remove unnecessary columns
+         select(person_id, death_date) %>%                             
+         # remove timestamp from death date
+         mutate_at("death_date", str_remove, pattern = " 0:00:00") %>%        
+         # convert death date to date type
+         mutate_at("death_date", as.Date, format='%d/%m/%Y') %>%              
+         # rename columns
+         rename("achd_id" = person_id)                                        
+```
+
+_ASGS AREAS_
+``` {r}
+# Import ASGS Lookup table
+asgs_lookup <- read.csv("./achd-dissertation/analysis_pipeline/output/ASGS_lookup.csv") %>%
+#             ------------Clean up the data-----------------  
+              # select subrub, postcode and sa2 name columns
+              select(LOCALITY_NAME,POSTCODE,SA2_NAME, SA3_NAME, SA4_NAME, GCC_NAME) %>% 
+              # Convert postcode to character
+              mutate_at("POSTCODE", as.character) %>%    
+              # Convert suburb name to character
+              mutate_at("LOCALITY_NAME", as.character)    
+```
+
+``` {r}
+# Add the ASGS area names to the ADMIN dataset, based on the suburb and postcode name
+ADMIN_sa2 <- left_join(ADMIN, asgs_lookup, by = c("suburb" = "LOCALITY_NAME", 
+                                                 "postcode" = "POSTCODE"))
+```
+
+_FOLLOW UP STATUS_
+``` {r}
+# load Follow Up Status dataset
+FUP <- read.csv(paste(ACHD_path, 'Table_exports/FOLLOW-UP STATUS.csv', sep="")) %>%
+#               ------------Clean up the data-------------------------
+                # select columns for id and clinic dates
+                select(person_id, fup_last_date, fup_comment, fup_Seen_by, fup_outreach, fup_new) %>%
+                # rename columns
+                rename( 'achd_id' = person_id,                        
+                        'clinic_date' = fup_last_date, 
+                        'clinic_comment' = fup_comment,
+                        'seen_by' = fup_Seen_by,
+                        'outreach' = fup_outreach,
+                        'new' = fup_new) %>%
+                # remove timestamp from clinic date
+                mutate_at("clinic_date", str_remove, pattern = " 0:00:00") %>%       
+                # Convert clinic dates to Date format
+                mutate_at("clinic_date",as.Date, format='%d/%m/%Y') %>%  
+                # Arrange by clinic date in ascending order
+                arrange(clinic_date) %>%
+                # Filter for records without a missing clinic date
+                filter(!is.na(clinic_date)) %>%
+                # Replace missing in "seen_by" with NA
+                mutate(seen_by = replace(seen_by, seen_by == "", NA))
+```
+
+
+``` {r}
+# Join the tables to create a person level dataset
+
+                # Add data from MAIN Table
+person.level <- left_join(ADMIN_sa2, MAIN, by = "achd_id") %>%
+                rename("sa2" = SA2_NAME,
+                       "sa3" = SA3_NAME,
+                       "sa4" = SA4_NAME,
+                       "gcc" = GCC_NAME) %>%
+                # Add data from the DX Table
+                left_join(DX, by = "achd_id") %>%
+                # Add data from DEATH table
+                left_join(DEATH, by = 'achd_id') %>%
+                # Add 0 flag for people still alive in 'death' variable
+                mutate(death = replace(death, is.na(death), 0)) %>%
+                # add age at death   
+                mutate(age_death = as.period(dob %--% death_date)) %>% 
+                # add data from Follow Up Status table
+                nest_join(FUP, by = 'achd_id') %>%
+                rename( 'clinics' =  FUP)
+```
+
+The dataframes contained in `clinics` column looks like this (for one record):
+
+``` {r}
+# display one of the clinic_dates dataframes
+person.level %>% filter(achd_id == 1101) %>% .$clinics
+```
+
+
+To get some more information about the clinic visits for each patient, we will pull some information out of the `clinics` column
+
+```{r warning = FALSE}
+# Add some more rows to the dataset
+person.level <- person.level %>%
+            mutate(
+              # Number of clinics for each patient
+              no_clinics = map_dbl(map(clinics, ~ .$clinic_date), length), 
+              # First clinic date for each patient
+              first_clinic = as_date(map_dbl(clinics, ~ min(.$clinic_date))),
+              # Last clinic date for each patient
+              last_clinic = as_date(map_dbl(clinics, ~ max(.$clinic_date))), 
+              # Number of days between first and last clinic
+              date_diff = as.duration(first_clinic %--% last_clinic) / dyears(1),
+              # age at first clinic attendance
+              age_first_clinic = as.period(dob %--% first_clinic),
+              # age at last clinic attendance
+              age_last_clinic = as.period(dob %--% last_clinic)
+               )
+```
+
+``` {r warning = FALSE}
+person.level <- person.level %>%
+            mutate(
+              # Remove visits before 01/01/2000
+              clinics_2000 = map(clinics, ~ filter(., clinic_date >= as.Date('01/01/2000', format='%d/%m/%Y'))),
+              # number of clinics for each patient
+              no_clinics_2000 = map_dbl(map(clinics_2000, ~ .$clinic_date), length),
+              # Flag to for patient with no visit before 2000
+              clinic_drop = ifelse(no_clinics_2000 == 0, 1, 0),
+              # First clinic date for each patient
+              first_clinic_2000 = as_date(map_dbl(clinics_2000, ~ min(.$clinic_date))), 
+              # Last clinic date for each patient
+              last_clinic_2000 = as_date(map_dbl(clinics_2000, ~ max(.$clinic_date))),  
+              # Years between first and last clinic 
+              date_diff_2000 = as.duration(first_clinic_2000%--%last_clinic_2000)/dyears(1),   
+              # Recode infinity to NA
+              date_diff_2000 = replace(date_diff_2000, date_diff_2000 == -Inf, NA),
+              # age at first clinic attendance
+              age_first_clinic_2000 = as.period(dob %--% first_clinic_2000),
+              # age at last clinic attendance
+              age_last_clinic_2000 = as.period(dob %--% last_clinic_2000)
+                   )
+```
+
+__Address Cleaning List__
+Final version of this document should have nothing in it, address cleaning performed above was used with the cleaning list dated 08/10/2020
+``` {r}
+address_cleaning_list <- person.level %>% filter(valid_address == 1) %>%
+                                           filter(is.na(sa2)) %>%
+                                           select(achd_id,postcode, suburb, state,)
+
+address_cleaning_list
+
+write.csv(address_cleaning_list, paste(study_folder, 'output/test_', Sys.Date(), '.csv', sep=""))
+```
+
+__Cleaning Data Types__
+``` {r, echo = FALSE}
+# Variables to convert to factor
+names_factor <- c('achd_id' ,'sex', 'age_flag', 'RC', 'death', 'clinic_drop', 'valid_address', 'bethesda_name', 
+                  'bethesda_code', EPCC_codes)
+
+# Convert the above variables to factors
+person.level[,names_factor] <- lapply(person.level[,names_factor] , factor)
+
+# convert the diagnosis comment to a character vector
+person.level$dx_comment <- as.character(person.level$dx_comment)
+
+#re-add the diagnosis labels
+person.level <- do.call(apply_labels, c(list(data = person.level), EPCC_to_names))
+```
+
+
+``` {r}
+print('Variables and data types')
+sapply(person.level, class)
+```
+
+__EDA__  
+The data cleaning above has created three variables that we will use to filter out invalid records  
+    - age_flag: flags people 18 and over (1) or below 18 (0)  
+    - valid_address: flags people with valid addresses (1) or invalid (0)  
+    - clinic_drop: flags records with no clinic visits after 01/01/2000 (1) or those with clinics after that date (0)  
+
+The purpose of this EDA is to explore how filtering out records based on the criteria above affects important data
+
+_Distribution of patient above and below 18 years old_
+``` {r, echo = FALSE, warning = FALSE}
+knitr::kable(person.level %>% count(age_flag)) 
+```
+
+_Distribution of patient with and without clinic dates after 01/01/2000_
+``` {r, echo = FALSE, warning = FALSE}
+knitr::kable(person.level %>% count(clinic_drop))
+```
+
+_Distribution of patients with and without valid addresses_
+``` {r, echo = FALSE, warning = FALSE}
+knitr::kable(person.level %>% count(valid_address))
+```
+
+Create a second dataset that filters out the above  
+    - Patients 18 or over (`age_flag == 1`)  
+    - Patients with a valid address (`valid_address == 1`)  
+    - Patients with clinic visits after 01/01/2020 (`clinic_drop == 0`)
+    
+``` {r}
+person.level.filtered <- person.level %>%
+                            filter(age_flag == 1 &
+                                   valid_address == 1 &
+                                   clinic_drop == 0)
+
+```
+
+
+``` {r, echo = FALSE}
+print("Dimensions of the original dataset")
+paste('Number of variables:', dim(person.level)[2])
+paste('Number of records:', dim(person.level)[1])
+
+print("Dimensions of the filtered dataset")
+paste('Number of variables:', dim(person.level.filtered)[2])
+paste('Number of records:', dim(person.level.filtered)[1])
+```
+
+
+``` {r}
+# check missingness in the original dataset
+sapply(person.level, function(x) sum(is.na(x)))
+
+```
+
+``` {r}
+# check missingness in the filtered dataset
+sapply(person.level.filtered, function(x) sum(is.na(x)))
+
+```
+
+_Number of Clinics_
+``` {r, echo = FALSE}
+ggplot(person.level, aes(x=no_clinics)) +
+      geom_bar(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.7), labels = percent) +
+      scale_x_continuous(breaks = seq(0,20,1)) +
+      labs(title = "Distribution of Number of Clinic Visits", 
+           y = "Percent", 
+           x = "Number of Visits")
+
+
+ggplot(person.level.filtered, aes(x=no_clinics_2000)) +
+      geom_bar(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.7), labels = percent) +
+      scale_x_continuous(breaks = seq(0,20,1)) +
+      labs(title = "Distribution of Number of Clinic Visits after 01/01/2000", 
+           y = "Percent", 
+           x = "Number of Visits")
+
+```
+
+``` {r, echo = FALSE}
+person.level %>%
+  filter(no_clinics > 1) %>%
+  ggplot(aes(x=no_clinics)) +
+      geom_bar(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.5), labels = percent) +
+      scale_x_continuous(breaks = seq(0,20,1)) +
+      labs(title = "Distribution of Number of Clinic Visits", 
+           y = "Percent", 
+           x = "Number of Visits")
+
+person.level.filtered %>%
+  filter(no_clinics_2000 > 1) %>%
+  ggplot(aes(x=no_clinics_2000)) +
+        geom_bar(aes( y = ..count../sum(..count..))) +
+        scale_y_continuous(limits = c(0,0.5), labels = percent) +
+        scale_x_continuous(breaks = seq(0,20,1)) +
+        labs(title = "Distribution of Number of Clinic Visits after 01/01/2000", 
+             y = "Percent", 
+             x = "Number of Visits")
+
+```
+
+_First Clinic Date_
+``` {r, echo = FALSE}
+ggplot(person.level, aes(x=first_clinic)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.25), labels = percent) +
+      labs(title = "Distribution of First Clinic Visit", 
+           y = "Percent", 
+           x = "Year")
+
+ggplot(person.level.filtered, aes(x=first_clinic_2000)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.25), labels = percent) +
+      labs(title = "Distribution of First Clinic Visit after 01/01/2000", 
+           y = "Percent", 
+           x = "Year")
+```
+
+_Last Clinic Date_
+``` {r, echo = FALSE}
+ggplot(person.level, aes(x=last_clinic)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.25), labels = percent) +
+      labs(title = "Distribution of Last Clinic Visit", 
+           y = "Percent", 
+           x = "Year")
+
+ggplot(person.level.filtered, aes(x=last_clinic_2000)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.25), labels = percent) +
+      labs(title = "Distribution of Last Clinic Visit after 01/01/2000", 
+           y = "Percent", 
+           x = "Year")
+```
+
+_Time between first and last clinic_
+``` {r, echo = FALSE}
+ggplot(person.level, aes(x=date_diff)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.7), labels = percent) +
+      labs(title = "Distribution of Years between first and last visit", 
+           y = "Percent", 
+           x = "years")
+
+ggplot(person.level.filtered, aes(x=date_diff_2000)) +
+      geom_histogram(aes( y = ..count../sum(..count..))) +
+      scale_y_continuous(limits = c(0,0.7), labels = percent) +
+      labs(title = "Distribution of Years between first and last visit, after 01/01/2000", 
+           y = "Percent", 
+           x = "years")
+```
+
+``` {r, echo = FALSE}
+person.level %>%
+  filter(no_clinics > 1) %>%
+  ggplot(aes(x=date_diff)) +
+      geom_histogram(aes( y = ..count../sum(..count..)))+
+      scale_y_continuous(limits = c(0,0.3), labels = percent) +
+      labs(title = "Distribution of Years between first and last visit", 
+           y = "Percent", 
+           x = "years")
+
+person.level.filtered %>%
+  filter(no_clinics_2000 > 1) %>%
+  ggplot(aes(x=date_diff_2000)) +
+        geom_histogram(aes( y = ..count../sum(..count..)))+
+        scale_y_continuous(limits = c(0,0.3), labels = percent) +
+        labs(title = "Distribution of Years between first and last visit, after 01/01/2000", 
+             y = "Percent", 
+             x = "years")
+```
+
+_sex_
+``` {r, echo = FALSE}
+ggplot(person.level, aes(x=as.factor(sex))) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,0.6), breaks = seq(0,0.6,0.1), labels = percent) +
+  labs(title = "Sex", 
+       y = "Percent", 
+       x = "Sex")
+
+
+ggplot(person.level.filtered, aes(x=as.factor(sex))) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,0.6), breaks = seq(0,0.6,0.1), labels = percent) +
+  labs(title = "Sex", 
+       y = "Percent", 
+       x = "Sex")
+```
+
+_age_
+```{r, echo = FALSE}
+person.level %>%
+  filter(death == 0) %>%
+  ggplot(aes(x=as.numeric(age, "years"))) +
+    geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+    scale_y_continuous(limits = c(0,0.1), labels = percent) +
+    scale_x_continuous(limits = c(0,120)) +
+    labs(title = "Age", 
+         y = "count", 
+         x = "years")
+
+person.level.filtered %>%
+  filter(death == 0) %>%
+  ggplot(aes(x=as.numeric(age, "years"))) +
+    geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+    scale_y_continuous(limits = c(0,0.1), labels = percent) +
+    scale_x_continuous(limits = c(0,120)) +
+    labs(title = "Age", 
+         y = "count", 
+         x = "years")
+
+
+```
+
+_death_
+```{r, echo = FALSE}
+ggplot(person.level, aes(x=as.factor(death))) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  labs(title = "death", 
+       y = "Percent", 
+       x = "death")
+
+ggplot(person.level.filtered, aes(x=as.factor(death))) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  labs(title = "death", 
+       y = "Percent", 
+       x = "death")
+```
+
+_age at death_
+```{r, echo = FALSE}
+ggplot(person.level, aes(x=as.numeric(age_death, "years"))) +
+  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+  scale_y_continuous(limits = c(0,0.1), labels = percent) +
+  labs(title = "age at death", 
+       y = "count", 
+       x = "age at death")
+
+ggplot(person.level.filtered, aes(x=as.numeric(age_death, "years"))) +
+  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+  scale_y_continuous(limits = c(0,0.1), labels = percent) +
+  labs(title = "age at death", 
+       y = "count", 
+       x = "age at death")
+```
+
+
+_Diagnoses_
+``` {r echo = FALSE}
+ggplot(person.level, aes(x=no_dx)) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  scale_x_continuous(breaks = seq(0,10,1)) +
+  labs(title = "Number of Diangoses per person", 
+       y = "count", 
+       x = "Number of Diagnoses")
+
+ggplot(person.level.filtered, aes(x=no_dx)) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  scale_x_continuous(breaks = seq(0,10,1)) +
+  labs(title = "Number of Diangoses per person", 
+       y = "count", 
+       x = "Number of Diagnoses")
+```
+
+``` {r echo = FALSE}
+print('number of people with no diagnosis - original dataset:')
+length(person.level$achd_id[person.level$no_dx == 0])
+
+print('number of people with no diagnosis - filtered dataset:')
+length(person.level.filtered$achd_id[person.level.filtered$no_dx == 0])
+```
+
+``` {r, echo = FALSE}
+# created a dataset with only the disagnoses
+dx.only <- person.level %>%
+  select(all_of(EPCC_codes)) %>%
+  mutate_all(as.character) %>%
+  mutate_all(as.numeric)
+
+#re-add the diagnosis labels
+dx.only <- do.call(apply_labels, c(list(data = dx.only), EPCC_to_names))
+
+# created a dataset with only the disagnoses - from the filtered data
+dx.only.filtered <- person.level.filtered %>%
+  select(all_of(EPCC_codes)) %>%
+  mutate_all(as.character) %>%
+  mutate_all(as.numeric)
+
+#re-add the diagnosis labels
+dx.only.filtered <- do.call(apply_labels, c(list(data = dx.only.filtered), EPCC_to_names))
+```
+
+``` {r, echo = FALSE}
+# The frequency each diagnosis appears in the dataset
+dx.count <- dx.only %>%
+            summarise_all(sum, na.rm = TRUE) %>%
+            t() 
+
+# Convert to data frame and clean
+dx.count <- as.data.frame(dx.count)
+dx.count$dx_name <- dx_names
+
+# plot the frequency of each diagnosis
+ggplot(dx.count, aes(x = dx_name, y=V1)) + 
+geom_bar(stat="identity",) +
+theme(axis.text.x = element_text(angle = 90)) +
+labs(title = "Frequecy of each diagnosis - full dataset", 
+   y = "count",
+   x = "")
+```
+
+
+``` {r, echo = FALSE}
+# The frequency each diagnosis appears in the dataset - from the filtered dataset
+dx.count.filtered <- dx.only.filtered %>%
+            summarise_all(sum, na.rm = TRUE) %>%
+            t() 
+
+# Convert to data frame and clean
+dx.count.filtered <- as.data.frame(dxCR3.count.filtered)
+dx.count.filtered$dx_name <- dx_names
+
+# plot the frequency of each diagnosis
+ggplot(dx.count.filtered, aes(x = dx_name, y=V1)) + 
+  geom_bar(stat="identity") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "Frequecy of each diagnosis - filtered dataset", 
+     y = "count",
+     x = "")
+```
+
+_Disease Severity_
+``` {r}
+ggplot(person.level, aes(x=bethesda_code)) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  labs(title = "death", 
+       y = "Percent", 
+       x = "death")
+
+ggplot(person.level.filtered, aes(x=bethesda_code)) +
+  geom_bar(aes( y = ..count../sum(..count..)))+
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  labs(title = "death", 
+       y = "Percent", 
+       x = "death")
+```
+
+
+
+_Counting the ACHD population in each area_
+``` {r}
+# count the number achd patients in each SA2 area
+sa2.count <- person.level.filtered %>% count(sa2) %>%
+                        rename("ACHD_count" = n)
+
+# count the number achd patients in each SA3 area
+sa3.count <- person.level.filtered %>% count(sa3) %>%
+                        rename("ACHD_count" = n)
+
+# count the number achd patients in each SA4 area
+sa4.count <- person.level.filtered %>% count(sa4) %>%
+                        rename("ACHD_count" = n)
+```
+
+
+``` {r}
+sa2.count %>% filter(!is.na(sa2)) %>%
+ggplot(aes(x=ACHD_count)) +
+  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+  scale_y_continuous(limits = c(0,0.25), labels = percent) +
+  scale_x_continuous(breaks = seq(0,60,5)) +
+  labs(title = "Population per sa2 area", 
+       y = "percent", 
+       x = "Population per sa2 area")
+
+sa3.count %>% filter(!is.na(sa3)) %>%
+ggplot(aes(x=ACHD_count)) +
+  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+  scale_y_continuous(limits = c(0,0.25), labels = percent) +
+  scale_x_continuous(breaks = seq(0,500,50)) +
+  labs(title = "Population per sa3 area", 
+       y = "percent", 
+       x = "Population per sa3 area")
+
+sa4.count %>% filter(!is.na(sa4)) %>%
+ggplot(aes(x=ACHD_count)) +
+  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
+  scale_y_continuous(limits = c(0,0.25), labels = percent) +
+  scale_x_continuous(breaks = seq(0,500,50)) +
+  labs(title = "Population per sa4 area", 
+       y = "percent", 
+       x = "Population per sa4 area")
+
+```
+
+_Saving the data_
+``` {r, eval = FALSE}
+#Save the Master Code Sheet
+library(xlsx)
+# request a password to protect the master code sheet
+mcs_pass <- readline(prompt="enter a password for the mastercode sheet: ")
+# select the identifiers from the dataset
+master_code_sheet <- person.level.filtered %>% select(achd_id, dob, sex, suburb, postcode, state)
+# write the master code sheet to an excel spreadsheet
+write.xlsx(x = master_code_sheet,
+           file = paste(study_folder, 'master_code_sheet/RPAH_master_code_sheet_', Sys.Date(), '.xlsx', sep=""),
+           sheetName = "master_code_sheet",
+           password = mcs_pass)
+
+#Save the analysis data set
+analysis_dataset <- person.level.filtered %>% select(-dob, -suburb, -postcode, -state)
+#write the analysis dataset to a csv file and an R data file
+saveRDS(analysis_dataset, file = paste(study_folder, 'output/rpah_analysis_dataset_', Sys.Date(), '.rds', sep=""))
+#cannot save the nested 'clinics columns as csv
+analysis_dataset %>% select(-clinics,-clinics_2000) %>%
+      write.csv(paste(study_folder, 'output/rpah_analysis_dataset_', Sys.Date(), '.csv', sep=""))
+```
+
+
+
+
+
+

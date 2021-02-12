@@ -1,0 +1,109 @@
+---
+title: "leaflet_prep"
+author: "Calum Nicholson"
+date: "13/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '../..')
+
+# Path to the study's data folder (note: only accessible at RPAH)
+study_folder <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+library(tidyverse)
+library(lubridate)
+library(rgdal)
+library(sp)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+library(ggplot2)
+```
+
+``` {r}
+#import polygon boundaries
+sa2.polys <- readOGR('./ASGS/1270055001_sa2_2016_aust_shape/SA2_2016_AUST.shp')
+sa3.polys <- readOGR('./ASGS/1270055001_sa3_2016_aust_shape/SA3_2016_AUST.shp')
+sa4.polys <- readOGR('./ASGS/1270055001_sa4_2016_aust_shape/SA4_2016_AUST.shp')
+``` 
+
+``` {r}
+# Fuction to prepare shape data
+prep.SA.data <- function (shapefile, smoothing, area_type) {
+  #Select only NSW and ACT shapes and simply the boundaries
+  NSW_shapes <- subset(shapefile, shapefile$GCC_NAME16 %in% 
+                     c("Rest of NSW", "Greater Sydney", "Australian Capital Territory"))
+  simple_shapes <- rgeos::gSimplify(NSW_shapes, tol = smoothing, topologyPreserve=TRUE)
+  
+  simple_shapes$GCC_NAME16 <- NSW_shapes$GCC_NAME16
+  
+  if (area_type == 'sa2') {
+        # Add the SA2 code and name to the simplified shapefile
+        simple_shapes$SA2_5DIG16 <- NSW_shapes$SA2_5DIG16
+        simple_shapes$SA2_NAME16 <- NSW_shapes$SA2_NAME16
+        # Make the column names generic (to help with the reactive functions in shiny)
+        simple_shapes@data <- simple_shapes@data %>%
+                                  rename("CODE16" = SA2_5DIG16,
+                                         "NAME16" = SA2_NAME16)
+  
+  } else if (area_type == 'sa3') {
+        # Add the SA3 code and name to the simplified shapefile
+        simple_shapes$SA3_CODE16 <- NSW_shapes$SA3_CODE16
+        simple_shapes$SA3_NAME16 <- NSW_shapes$SA3_NAME16
+        # Make the column names generic (to help with the reactive functions in shiny)
+        simple_shapes@data <- simple_shapes@data %>%
+                                  rename("CODE16" = SA3_CODE16,
+                                         "NAME16" = SA3_NAME16)
+  
+  } else if (area_type == 'sa4') {
+        # Add the SA4 code and name to the simplified shapefile
+        simple_shapes$SA4_CODE16 <- NSW_shapes$SA4_CODE16
+        simple_shapes$SA4_NAME16 <- NSW_shapes$SA4_NAME16
+        simple_shapes@data <- simple_shapes@data %>%
+                                  rename("CODE16" = SA4_CODE16,
+                                         "NAME16" = SA4_NAME16)
+        
+  } else { print('provide area type sa2, sa3, sa4 only') }
+  
+  simple_shapes
+}
+```
+
+
+``` {r}
+# prepare the shape files
+sa2.shapes <- prep.SA.data(sa2.polys, 0.01, 'sa2')
+sa3.shapes <- prep.SA.data(sa3.polys, 0.01, 'sa3')
+sa4.shapes <- prep.SA.data(sa4.polys, 0.01, 'sa4')
+```
+
+
+``` {r}
+getwd()
+
+filepath = "./achd-dissertation/ACHD_Dashboard/data/shape_files/"
+
+#save the files
+writeOGR(sa2.shapes, layer = 'sa2_polys', dsn = filepath, driver="ESRI Shapefile")
+writeOGR(sa3.shapes, layer = 'sa3_polys', dsn = filepath, driver="ESRI Shapefile")
+writeOGR(sa4.shapes, layer = 'sa4_polys', dsn = filepath, driver="ESRI Shapefile")
+
+```
+
+
+
+
+``` {r}
+getwd()
+tes <- readOGR("./achd-dissertation/ACHD_Dashboard/data/shape_files/sa2_polys.shp")
+
+```
+
+
+
+
+

@@ -22,7 +22,7 @@ htt_details <- read.csv('./hospital_tt/myhospitals-contact-details.csv')
 ```
 
 ``` {r}
-NSW_sa2 <- read.csv('./achd-dissertation/EDA/output/sa2_table_builder.csv') %>%
+NSW_sa2 <- read.csv('./analysis_pipeline/output/sa2_table_builder.csv') %>%
                 select(SA2_5DIGITCODE_2016) %>%
                 rename('SA2_5DIG16' = SA2_5DIGITCODE_2016)
 ```
