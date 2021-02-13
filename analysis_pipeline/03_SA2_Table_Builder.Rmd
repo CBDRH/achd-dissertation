@@ -20,10 +20,6 @@ Table Builder data was downloaded on 5 Jun 2020. The data is located in Disserta
 
 Each table row in this folder is an SA2 area for NSW, with the columns describing a certain demographic. This function will import the data and remove the unneccesary rows.
 
-``` {r}
-getwd()
-
-```
 
 ``` {r}
 # Function to import and clean SA2 Tables

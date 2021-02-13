@@ -29,7 +29,15 @@ app_data <- './data/'
 ################################## LOAD DATA ############################################
 
 #import ACHD data
-achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2020-10-18.rds', sep=""))
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep="")) %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD.Database.name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep=""))
 
 #Import area polygons
 sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
@@ -131,19 +139,7 @@ body <- dashboardBody(
                 ),
                 #Map Customisation 
                 fluidRow(
-                    box(title = "Map Customisation",
-                        selectInput('loc.poly.select', 'Select Area Level:',
-                                    choices = c('SA2' = 2,
-                                                'SA3' = 3,
-                                                'SA4' = 4),
-                                    selected = 4),
-                        checkboxGroupInput("loc.gcc", "Filter by Region",
-                                           choices = c('Greater Sydney' = "Greater Sydney",
-                                                       'Rest of NSW' = "Rest of NSW",
-                                                       'ACT' = "Australian Capital Territory"),
-                                           selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
-                        actionButton("loc.update", "Update")
-                    )
+                    
                 ),
                 # Summary Values
                 fluidRow(valueBoxOutput('pt.count.loc', width = 3),
@@ -151,8 +147,27 @@ body <- dashboardBody(
                          valueBoxOutput('moderate.count.loc', width = 3),
                          valueBoxOutput('complex.count.loc', width = 3)
                 ),
-                fluidRow(uiOutput('locations.map.box'),
-                         uiOutput('locations.summary.box')
+                fluidRow(
+                        box(title = "Map Customisation",
+                        selectInput('loc.poly.select', 'Select Area Level:',
+                                    choices = c('SA2' = 2,
+                                                'SA3' = 3,
+                                                'SA4' = 4),
+                                    selected = 2),
+                        checkboxGroupInput("loc.gcc", "Filter by Region",
+                                           choices = c('Greater Sydney' = "Greater Sydney",
+                                                       'Rest of NSW' = "Rest of NSW",
+                                                       'ACT' = "Australian Capital Territory"),
+                                           selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
+                        actionButton("loc.update", "Update"),
+                        width = 3, height = 580
+                        ),
+                        uiOutput('locations.map.box'),
+                         
+                ),
+                fluidRow(uiOutput('locations.summary.box')
+                ),
+                fluidRow(uiOutput('area.dx.box')
                 )
         )
     )
@@ -178,39 +193,52 @@ server <- function(input, output) {
     
     # count frequency of diagnoses
     dx.count <- reactive({
-        # all the diagnosis variables
-        dx_names <- c('ABNAO','AbnAV','AbnMV','ABNPV','AbnRV','ABNTV','AbnCA','AbnVeins','AbsentPA','ALCAPA', 'Aneurism',
-                      'APwindow','AVfistula','CHB','CorTriatriatum','Gerbodde','Hemi_truncus','LPA_sling','PAV_Malform',
-                      'Shones','AoC','AoInterrupt','AR','AS','ASD','AVSD','BAVD','ccTGA','DEXTROCARDIA','DILV','DIRV','DORV',
-                      'Ebstein','EISENMENGER','FONTAN','HLHS','LVNONCOMPACT','MAPCA','Other','PA','PAPVD','PAS','PDA','PFO',
-                      'PS','SubAS','SubPS','SupraAS','SupraMS','SupraPS','TA','TAPVD','TGA','TOF','TRUNCART','UnkDx','VSD')
         
         # created a dataset with only the disagnoses
         dx.df <- achd.filtered() %>%
-            select(dx_names) %>%
+            select(dx_codes$EPCC) %>%
             mutate_all(as.character) %>%
             mutate_all(as.numeric) %>%
             summarise_all(sum, na.rm = TRUE) %>%
-            t() %>% as.data.frame()
+            t() %>% as.data.frame() %>% 
+            rename("dx_count" = V1) %>% 
+            mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)])
         
-        dx.df$HeaderName <- row.names(dx.df)
         dx.df
     })
     
     # Create area-level ACHD data
     set.area.achd <- reactive({
         if (input$loc.poly.select == 2) {
-        area.achd <- achd.filtered() %>%
-            count(sa2) %>% rename("ACHD_count" = n,
-                                  "area" = sa2)
+            achd.df <- achd.filtered() %>% rename("area" = sa2)
+            TB.df <- sa2.TB %>% rename("area" = sa2_area)
         } else if (input$loc.poly.select == 3) {
-            area.achd <- achd.filtered() %>%
-                count(sa3) %>% rename("ACHD_count" = n,
-                                      "area" = sa3)
-        } else {area.achd <- achd.filtered() %>%
-                 count(sa4) %>% rename("ACHD_count" = n,
-                                       "area"= sa4)}
-        area.achd
+            achd.df <- achd.filtered() %>% rename("area" = sa3)
+        } else {
+            achd.df <- achd.filtered() %>% rename("area"= sa4)}
+        
+        area.achd <- achd.df %>%
+            group_by(area) %>% 
+            summarise(ACHD_count = n(), 
+                      beth_1 = sum(bethesda_code == 1),
+                      beth_2 = sum(bethesda_code == 2), 
+                      beth_3 = sum(bethesda_code == 3), 
+                      beth_4 = sum(bethesda_code == 4))
+        
+        area.dx <- achd.df %>%
+            mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
+            mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+            group_by(area) %>% 
+            dplyr::summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+        
+        area.data <- left_join(TB.df, area.achd, by = 'area') %>% 
+                        left_join(area.dx, by = 'area') %>%
+                        mutate_at(as.character(dx_codes[['EPCC']]), 
+                                  function(x) replace(x, is.na(x), 0)) %>%
+                        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), 
+                                  function(x) replace(x, is.na(x), 0))
+        
+        area.data
     })
     
     #select polygons for plotting 
@@ -223,7 +251,7 @@ server <- function(input, output) {
         # add the achd population for each area 
         polys <- merge(polys, set.area.achd(), by.x = 'NAME16', by.y = 'area')
         #convert NAs to 0
-        polys@data <- polys@data %>% replace_na(list('ACHD_count' = 0))
+        #polys@data <- polys@data %>% replace_na(list('ACHD_count' = 0))
         
         # Filter by the GCC areas selected
         polys.filtered <- subset(polys, polys$GCC_NAME16 %in% input$loc.gcc)
@@ -355,7 +383,8 @@ server <- function(input, output) {
         })
     })
     output$dx_plot <- renderPlot({
-        ggplot(dx.count(), aes(x = HeaderName, y=V1)) + 
+        dx.count() %>% filter(dx_count > 0) %>%
+        ggplot(aes(x = dx_label, y=dx_count)) + 
             geom_bar(stat="identity") +
             theme(axis.text.x = element_text(angle = 90)) +
             labs(title = "Frequecy of each diagnosis", 
@@ -397,7 +426,7 @@ server <- function(input, output) {
     observeEvent(input$loc.update, {
         output$locations.map.box <- renderUI({
             box(leafletOutput('locations.map', height = 550),
-                width = 7, height = 580)
+                width = 9, height = 580)
         })
     })
     # create the map withiin the box
@@ -446,25 +475,56 @@ server <- function(input, output) {
         # the area click event
         event <- input$locations.map_shape_click
         # select the correct area
-        event_area <- set.polys()@data %>% filter(CODE16 == event$id)
-        # filter ACHD data for area only
-        achd.area <- achd.filtered() %>% filter()
+        event_area <- set.area.achd() %>% filter(SA2_5DIGIT == event$id)
         
         #--------------CREATE BOX------------------#
         output$locations.summary.box <- renderUI({
-            box(title = as.character(event_area[["NAME16"]]),
+            box(title = as.character(event_area[["area"]]),
                 htmlOutput("area.summary"),
-                width = 5, height = 580
+                width = 12, height = 200
             )
         })
         
         #---------------BOX CONTENT----------------#
         output$area.summary <- renderUI({
-            str1 <- paste("<strong>Number of ACHD patients:</strong> ", event_area[["ACHD_count"]])
-            str2 <- paste("<strong>Number of patients lost to follow up:</strong> ", event_area[["ACHD_count"]])
-            HTML(paste(str1, str2, sep = '<br/>'))
+            str_ptno <- paste("<strong>Number of ACHD patients:</strong> ", 
+                              event_area[["ACHD_count"]], 
+                              sep = "")
+            str_drive <- paste("<strong>Driving time to nearest clinic:</strong> ", 
+                          as.period(event_area[["shortest_time"]])@hour, "hrs ",
+                          as.period(event_area[["shortest_time"]])@minute, "min", 
+                          sep = "")
+            str_bethesda <- paste("<strong>Simple | Moderate | Severe -</strong> ",
+                                  event_area[["beth_1"]], " | ",
+                                  event_area[["beth_2"]], " | ",
+                                  event_area[["beth_3"]], " | ",
+                                  sep = "")
+            HTML(paste(str_ptno, str_drive, str_bethesda, sep = '<br/>'))
             
             })
+        
+        output$area.dx.box <- renderUI({
+            box(title = "CHD Diagnoses in ",
+                plotOutput("dx_area_plot"),
+                width = 12, height = 580
+                )
+            })
+            
+            output$dx_area_plot <- renderPlot({
+                    event_area %>% select(dx_codes$EPCC) %>% 
+                                   t() %>% as.data.frame() %>%
+                                   rename("dx_count" = V1) %>% 
+                                   mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)]) %>%
+                                   filter(dx_count > 0) %>%
+                    ggplot(aes(x = dx_label, y=dx_count)) + 
+                    geom_bar(stat="identity") +
+                    theme(axis.text.x = element_text(angle = 90)) +
+                    labs(title = "Frequecy of each diagnosis", 
+                         y = "count",
+                         x = "") +
+                    coord_flip()
+            })
+        
         
     })
     

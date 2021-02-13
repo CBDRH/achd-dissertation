@@ -400,6 +400,7 @@ DX <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
 ACHD_to_EPCC <- read.csv('./dx_codes/ACHD_EPCC_coding.csv') %>% 
                 filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA'))
 
+# Change the DX column names to the correct ECC codes
 names(DX) <- ACHD_to_EPCC$EPCC.Code[match(names(DX), ACHD_to_EPCC$Variable)]
 
 # Remove the 'achd_id' row from the ACHD to EPCC lookup table
