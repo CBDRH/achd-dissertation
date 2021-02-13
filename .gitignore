@@ -40,3 +40,6 @@ vignettes/*.pdf
 
 # Other file types
 .Rhistory
+.DS_Store
+.html
+.pdf
