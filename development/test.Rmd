@@ -1,0 +1,105 @@
+---
+title: "test"
+author: "Calum Nicholson"
+date: "17/02/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(rgdal)
+library(sp)
+library(plyr)
+library(dplyr)
+library(leaflet)
+library(leaflet.extras)
+library(ggplot2)
+library(sjmisc)
+library(lubridate)
+```
+
+``` {r}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+app_data <- './data/'
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2020-10-18.rds', sep=""))
+
+area.achd <- achd %>% dplyr::count(sa4) %>% dplyr::rename("ACHD_count" = n,
+                                  "area" = sa4)
+```
+
+``` {r}
+achd %>% mutate(gap = as.duration(as.Date('01/10/2020', format='%d/%m/%Y') - last_clinic_2000) / dyears(1),
+                ltf_3 = ifelse(gap >= 3, 1, 0),
+                ltf_4 = ifelse(gap >= 4, 1, 0),
+                ltf_5 = ifelse(gap >= 5, 1, 0),
+                ) %>%
+         select(last_clinic_2000, gap, ltf_3, ltf_4, ltf_5)
+
+```
+
+
+``` {r}
+achd.1 <- achd %>% mutate(gap = as.duration(as.Date('01/10/2020', format='%d/%m/%Y') - last_clinic_2000) / dyears(1),
+                          ltf_3 = ifelse(gap >= 3, 1, 0),
+                          ltf_4 = ifelse(gap >= 4, 1, 0),
+                          ltf_5 = ifelse(gap >= 5, 1, 0),
+                          ) %>%
+                   select(sa4, bethesda_code, ltf_3, ltf_4, ltf_5)
+
+
+achd.1 %>% group_by(sa4) %>% dplyr::summarise(n = n(), 
+                                              beth_1 = sum(bethesda_code == 1), 
+                                              beth_2 = sum(bethesda_code == 2),
+                                              beth_3 = sum(bethesda_code == 3),
+                                              beth_4 = sum(bethesda_code == 4),
+                                              ltf_3 = sum(ltf_3),
+                                              ltf_4 = sum(ltf_4),
+                                              ltf_5 = sum(ltf_5),
+                                              )
+````
+
+
+
+
+
+```{r}
+polys <- readOGR('../ACHD_Dashboard/data/shape_files/sa4_polys.shp')
+```
+
+
+
+``` {r}
+polys$CODE16[polys$NAME16 == 'Riverina']
+
+polys$NAME16[polys$CODE16 == 113]
+```
+
+``` {r}
+# add the achd population for each area 
+polys <- merge(polys, area.achd, by.x = 'NAME16', by.y = 'area')
+#convert NAs to 0
+polys@data <- polys@data %>% replace_na(list('ACHD_count' = 0))
+
+```
+
+
+``` {r}
+id = as.numeric('113')
+
+
+polys$CODE16[polys$NAME16 == 'Riverina']
+
+polys$NAME16[polys$CODE16 == id]
+```
+
+
+
+
+

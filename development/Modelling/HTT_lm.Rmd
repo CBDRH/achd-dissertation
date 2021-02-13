@@ -1,0 +1,718 @@
+---
+title: "HTT_lm"
+author: "Calum Nicholson"
+date: "26/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# set '2020_achd_map' folder as root directory
+knitr::opts_knit$set(root.dir = '..')
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(Hmisc)
+library(olsrr)
+```
+
+``` {r}
+# load the census data
+table.builder <- readRDS(file = './EDA/output/sa2_table_builder.rds')
+```
+
+#Missingness in the dataset
+``` {r}
+# check missingness in the original dataset
+sapply(table.builder, function(x) sum(is.na(x)))
+
+```
+
+#Prepare the Dataset
+``` {r}
+# Prepare the dataset for modelling
+table.builder2 <- table.builder %>%
+                    # create variable for the percentage of the population aged 60 and above
+                    mutate(over60 = (rowSums(select(.,age60:age100)) / total_pop ) * 100 ) %>%
+                    # drop the variables we wont need for the model
+                    select(-c(age0,age10,age20,age30,age40,age50,age60,age70,age80,age90,age100,
+                              SA2_MAINCODE_2016,SA2_5DIGITCODE_2016,SA3_CODE_2016,SA3_NAME_2016,
+                              SA4_CODE_2016,SA4_NAME_2016, time_to_canberra, time_to_orange, time_to_nowra,
+                              time_to_port, time_to_rpa, time_to_westmead)) %>%
+                    # filter rows with no population
+                    filter(total_pop > 0) %>%
+                    # filter rows with missing outcome
+                    filter(!is.na(shortest_time)) %>%
+                    # Filter missing values from overcrowding stat
+                    filter(!is.na(oc_positive)) %>%
+                    # recreate outcome variable as numeric in minutes
+                    mutate(st_min = as.numeric(shortest_time, 'minutes'))
+```
+
+#Distribution of the Outcome
+``` {r}
+ggplot(data = table.builder2, aes(x = st_min)) +
+  geom_histogram() + 
+  scale_x_continuous(breaks = seq(0,660,60))
+```
+
+
+#Function for univariate Exploratory Data Analysis:
+```{r}
+# scatter plots for each variable by the shortest time to an achd clinic
+scatter.vars <- function(var) {
+  #Make the plot
+  ggplot(data = table.builder2, aes_string(x = 'st_min', y = var)) + 
+    geom_point() +
+    geom_smooth(color = "Blue", se=FALSE, size = 0.5) +
+    geom_smooth(method = "lm", color = "red", se=FALSE, size = 0.5) +
+    scale_y_continuous(breaks = seq(0,660,60)) +
+    ggtitle(var)
+}
+
+vars <- c("total_pop","male", "female","overseas","childcare","employ","oc_positive","oc_negative","sp_male",                      "sp_female","sp_total","student","over60")  
+```
+
+#Modelling the entire dataset
+
+##How is each variable related to the outcome?
+
+There seems to be two different relationships occuring between the variables and the outcome. For travel times less than 120 mins, there is a stark change, either positive or negative, in some variables. After this time, however the relationship i smore contast.  
+- Positive change over the first 120 mins: houses with spare rooms, single parents households, over 60 popultion  
+- Negative change over the first 120 mins: Total population, percentage born overseas, houses with overcrowding, percentage of students  
+- No change: percentage of males or females
+
+Unemployement doesnt show much change but the large outliers may be hiding this
+
+``` {r}
+lapply(vars, function(x) scatter.vars(x))
+```
+
+__check unemployment without outliers__
+``` {r}
+  ggplot(data = table.builder2, aes(x = st_min, y = employ)) + 
+    geom_point() +
+    geom_smooth(color = "Blue", se=FALSE, size = 0.5) +
+    geom_smooth(method = "lm", color = "red", se=FALSE, size = 0.5) +
+    scale_x_continuous(breaks = seq(0,660,60)) +
+    scale_y_continuous(limits = c(0,7.5)) +
+    ggtitle("unemployement")
+```
+
+##Fit Univariate Linear Models
+``` {r}
+
+#functions to fit univariate glms
+univ.lm <- function(outcome, variables) {
+  # list to store output tables
+  out <- list()
+  # count to add to list
+  count <- 1
+  # loop through the variables
+  for (i in variables) { 
+    f <- as.formula(paste(outcome, i, sep = '~'))
+    # fit the glm model and add to list
+    out[[count]] <- lm(f, data=table.builder2)
+    #add to the count
+    count <- count + 1
+  }
+  return(out)
+}
+
+```
+
+``` {r}
+#fit an univarite model for each variable
+uni.mods <- univ.lm("st_min", vars)
+
+# display the coefficients and p values for each univariate model
+for (i in 1:length(vars)) {
+  print(summary(uni.mods[[i]])$coefficients)
+}
+
+```
+
+##Build a model with the variables that are significant in the univariate models
+``` {r}
+sa2.lm <- lm(st_min ~ total_pop + overseas + childcare + employ + oc_positive + 
+                          oc_negative + sp_male + sp_female + student + over60,
+                          data = table.builder2)
+
+summary(sa2.lm)
+
+```
+
+##Build another model with the sigificant variables from sa2.lm
+``` {r}
+reduced.sa2.lm <- lm(st_min ~ total_pop + overseas + childcare + oc_negative, data = table.builder2)
+
+summary(reduced.sa2.lm)
+
+anova(reduced.sa2.lm, sa2.lm)
+
+```
+
+##Model Diagnositcs
+__Checking the residuals - homoskedacisty__  
+``` {r}
+# load the olsrr library
+library(olsrr)
+
+# residuals versus fitted values plot
+ols_plot_resid_fit(reduced.sa2.lm)
+# Breusch-Pagan test from olsrr library
+ols_test_breusch_pagan(reduced.sa2.lm, rhs=TRUE)
+```
+``` {r}
+table.builder2$residuals <- residuals(reduced.sa2.lm)
+```
+
+``` {r}
+ggplot(data = table.builder2, aes(x = st_min, y = residuals)) +
+    geom_point() +
+    scale_x_continuous(breaks = seq(0,660,60)) +
+    ggtitle("Residuals vs Outcome")
+
+ggplot(data = table.builder2, aes(x = total_pop, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs Total Population")
+
+ggplot(data = table.builder2, aes(x = overseas, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of population born overseas")
+
+ggplot(data = table.builder2, aes(x = childcare, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of population in chlidcare")
+
+ggplot(data = table.builder2, aes(x = oc_negative, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of overcrowded households")
+
+
+```
+__Checking the residuals - normality__  
+``` {r}
+qqnorm(residuals(reduced.sa2.lm), ylab="Residuals")
+qqline(residuals(reduced.sa2.lm))
+```
+
+``` {r}
+hist(residuals(reduced.sa2.lm), breaks = 50)
+```
+``` {r}
+shapiro.test(residuals(reduced.sa2.lm))
+```
+reject the null hypothesis that the residuals are normal
+
+__Checking for influentiak Observations__
+
+``` {r}
+library(faraway)
+faraway::halfnorm(cooks.distance(reduced.sa2.lm), nlab = 1, ylab="cooks distance", lab = table.builder2$sa2_area)
+
+```
+
+``` {r}
+# refit the model without the port botany industrial area
+reduced.sa2.lm.2 <- lm(st_min ~ total_pop + overseas + childcare + oc_negative, data = table.builder2, subset = (cooks.distance(reduced.sa2.lm) < 0.02))
+
+summary(reduced.sa2.lm.2)
+
+```
+
+``` {r}
+# residuals versus fitted values plot
+ols_plot_resid_fit(reduced.sa2.lm.2)
+# Breusch-Pagan test from olsrr library
+ols_test_breusch_pagan(reduced.sa2.lm.2, rhs=TRUE)
+```
+
+This model breaks a fair few assumptions, constant variance and normality of the residuals. Also the Residual standard error is quite high and the R2 quite low. suggesting a poor fit. The initial EDA also suggested the data was not linear and the spread of the outcome is not normal. It might be that the sydney population and rural population have very different circumstance. Perhaps sepaerating them would help.
+
+Also, judging by the relationship between the residuals and the predictors, some of the very low population areas might be causing an issue for the model fit, so we can try remove areas with population less than 100
+
+#Distribution of the Outcome separated by GCC Name
+``` {r}
+table.builder2$GCC_NAME16 <- as.factor(table.builder2$GCC_NAME16)
+
+table.builder.syd <- table.builder2 %>% filter(GCC_NAME16 == "Greater Sydney") %>% 
+                                        filter(total_pop > 100) %>%
+                                        select(-residuals)
+table.builder.nsw <- table.builder2 %>% filter(GCC_NAME16 == "Rest of NSW") %>% 
+                                        filter(total_pop > 100) %>%
+                                        select(-residuals)
+
+
+```
+
+``` {r}
+ggplot(data = table.builder.syd, aes(x = st_min)) +
+  geom_histogram() + 
+  scale_x_continuous(breaks = seq(0,660,60))
+```
+
+``` {r}
+ggplot(data = table.builder.nsw, aes(x = st_min)) +
+  geom_histogram() + 
+  scale_x_continuous(breaks = seq(0,660,60))
+```
+
+#EDA for the sydnet areas only
+##Corelation Matrix
+``` {r}
+syd.eda <- table.builder.syd %>% select(-sa2_area, -shortest_time, -GCC_NAME16)
+
+rcorr(as.matrix(syd.eda))$r
+
+rcorr(as.matrix(syd.eda))$P
+```
+##Binning the dataset
+``` {r}
+# 10 minute
+syd.bins.mean <- aggregate(syd.eda, #the data frame
+                 by=list(cut(syd.eda$st_min,seq(0,100,10))), #the bins
+                 function(x) {m = mean(x)}) #the aggregating function
+
+syd.bins.se <- aggregate(syd.eda, #the data frame
+                 by=list(cut(syd.eda$st_min,seq(0,100,10))), #the bins
+                 function(x) {sd(x)/sqrt(length(x))}) #the aggregating function
+
+syd.bins <- merge(syd.bins.mean, syd.bins.se, by = "Group.1")
+
+```
+
+##Function for univariate Exploratory Data Analysis, separated by urban/regional SA2 areas:
+```{r}
+# scatter plots for each variable by the shortest time to an achd clinic
+scatter.vars.binned<- function(var) {
+  var.m <- paste(var,".x",sep="")
+  var.se <- paste(var,".y",sep="")
+  df <- data.frame(syd.bins$Group.1, syd.bins[var.m], syd.bins[var.se])
+  names(df) <- c("st_min_grp", "mean", "se")
+  #plot the boxplot
+  ggplot(data = df, aes(x = st_min_grp, y = mean)) + 
+    geom_point() +
+    geom_errorbar((aes(ymin=mean-se, ymax=mean+se))) +
+    labs(y=var, x = "Time to Clinics (mins)") +
+    ggtitle(var)
+}
+
+vars <- c("total_pop","male", "female","overseas","childcare","employ","oc_positive","oc_negative","sp_male",                      "sp_female","sp_total","student","over60")  
+```
+
+``` {r}
+lapply(vars, function(x) scatter.vars.binned(x))
+```
+
+Summary of the above curves:  
+- Total_pop: negative linear, possible inflection at 70 mins
+- Male: flat
+- Female: flat
+- overseas: exponential decay
+- childcare: parabola? quadratic?
+- employ: parabola
+- oc_pos: neg parabola or quadratic
+- oc_neg: exponential decay
+- sp_male: positive linear
+- sp_female: positive linear, possible quadratic
+- sp_total: positive linear, possible quadratic
+- student: negative porabola, or linear
+- over_60: positive linear
+
+
+#Modelling the Sydney dataset
+
+##Testing transformations
+_Total Pop_
+linear fits best
+
+``` {r}
+# fit univariate models with transormations
+total.pop.ln <- lm(st_min ~ total_pop, data = table.builder.syd)
+summary(total.pop.ln)
+
+total.pop.quad <- lm(st_min ~ total_pop + I(total_pop^2), data = table.builder.syd)
+summary(total.pop.quad)
+
+anova(total.pop.quad, total.pop.ln)
+```
+
+_overseas_
+a quadratic term fits better than a linear term
+
+``` {r}
+# fit univariate models with transormations
+overseas.ln <- lm(st_min ~ overseas, data = table.builder.syd)
+summary(overseas.ln)
+
+#exponetial
+overseas.exp <- lm(st_min ~ I(exp(overseas)), data = table.builder.syd)
+summary(overseas.exp)
+
+anova(overseas.exp, overseas.ln)
+```
+
+``` {r}
+# logarithmic
+overseas.log <- lm(st_min ~ I(log(overseas)), data = table.builder.syd)
+summary(overseas.exp)
+
+anova(overseas.log, overseas.ln)
+```
+
+``` {r}
+# quadtratic
+overseas.quad <- lm(st_min ~ overseas + I(overseas^2), data = table.builder.syd)
+summary(overseas.quad)
+
+anova(overseas.quad, overseas.ln)
+```
+_childcare_
+``` {r}
+# fit univariate models with transormations
+childcare.ln <- lm(st_min ~ childcare, data = table.builder.syd)
+summary(childcare.ln)
+
+# Quadratic
+childcare.quad <- lm(st_min ~ childcare + I(childcare^2), data = table.builder.syd)
+summary(childcare.quad)
+
+anova(childcare.quad, childcare.ln)
+```
+
+``` {r}
+# parabola
+childcare.para <- lm(st_min ~ I(childcare^2), data = table.builder.syd)
+summary(childcare.para)
+
+anova(childcare.para, childcare.ln)
+```
+
+_employ_
+linear fits best, there is actually not much change on the binned curve
+
+``` {r}
+# fit univariate models with transormations
+employ.ln <- lm(st_min ~ employ, data = table.builder.syd)
+summary(employ.ln)
+
+# Quadratic
+employ.para <- lm(st_min ~ I(employ^2), data = table.builder.syd)
+summary(employ.para)
+
+anova(employ.para, employ.ln)
+```
+
+_oc_positive_
+linear seems to be best fit here, but quadratic is also not a bad choice
+``` {r}
+# fit univariate models with transormations
+oc_positive.ln <- lm(st_min ~ oc_positive, data = table.builder.syd)
+summary(oc_positive.ln)
+
+# Quadratic
+oc_positive.quad <- lm(st_min ~ oc_positive + I(oc_positive^2), data = table.builder.syd)
+summary(oc_positive.quad)
+
+anova(oc_positive.quad, oc_positive.ln)
+```
+
+_oc_negative_
+A quadratic term fits best
+
+``` {r}
+# fit univariate models with transormations
+oc_negative.ln <- lm(st_min ~ oc_negative, data = table.builder.syd)
+summary(oc_negative.ln)
+
+# Quadratic
+oc_negative.quad <- lm(st_min ~ oc_negative + I(oc_negative^2), data = table.builder.syd)
+summary(oc_negative.quad)
+
+anova(oc_negative.quad, oc_negative.ln)
+
+#exponential
+oc_negative.exp <- lm(st_min ~ I(exp(oc_negative)), data = table.builder.syd)
+summary(oc_negative.exp)
+
+anova(oc_negative.exp, oc_negative.ln)
+```
+
+_sp_female_
+linear term fits best
+``` {r}
+# fit univariate models with transormations
+sp_female.ln <- lm(st_min ~ sp_female, data = table.builder.syd)
+summary(sp_female.ln)
+
+# Quadratic
+sp_female.quad <- lm(st_min ~ sp_female + I(sp_female^2), data = table.builder.syd)
+summary(sp_female.quad)
+
+anova(sp_female.quad, sp_female.ln)
+```
+
+_sp_total_
+linear term fits best
+``` {r}
+# fit univariate models with transormations
+sp_total.ln <- lm(st_min ~ sp_total, data = table.builder.syd)
+summary(sp_total.ln)
+
+# Quadratic
+sp_total.quad <- lm(st_min ~ sp_total + I(sp_total^2), data = table.builder.syd)
+summary(sp_total.quad)
+
+anova(sp_total.quad, sp_total.ln)
+```
+
+_student_
+linear term fits best
+``` {r}
+# fit univariate models with transormations
+student.ln <- lm(st_min ~ student, data = table.builder.syd)
+summary(student.ln)
+
+# parabola
+student.para <- lm(st_min ~ I(student^2), data = table.builder.syd)
+summary(student.para)
+
+anova(student.para, student.ln)
+```
+##Fit Univariate Linear Models
+``` {r}
+
+#functions to fit univariate regression models
+univ.lm <- function(outcome, variables) {
+  # list to store output tables
+  out <- list()
+  # count to add to list
+  count <- 1
+  # loop through the variables
+  for (i in variables) { 
+    f <- as.formula(paste(outcome, i, sep = '~'))
+    # fit the glm model and add to list
+    out[[count]] <- lm(f, data=table.builder.syd)
+    #add to the count
+    count <- count + 1
+  }
+  return(out)
+}
+
+```
+
+``` {r}
+#fit an univarite model for each variable
+uni.mods <- univ.lm("st_min", vars)
+
+# display the coefficients and p values for each univariate model
+for (i in 1:length(vars)) {
+  print(summary(uni.mods[[i]])$coefficients)
+}
+
+```
+
+##Build a model with the variables that are significant in the univariate models
+
+__significant variables in univariate model:__ total_pop, male, female, overseas, childcare, employ, oc_positive, oc_negative, sp_male, sp_female, sp_total, student, over_60
+``` {r}
+sa2.lm <- lm(st_min ~ total_pop + male + female + overseas + childcare + employ + oc_positive + 
+                          oc_negative + sp_male + sp_female + sp_total+  student + over60,
+                          data = table.builder.syd)
+
+summary(sa2.lm)
+
+```
+
+##Build another model with the sigificant variables from sa2.lm
+``` {r}
+reduced.sa2.lm <- lm(st_min ~ total_pop + overseas + childcare + employ + oc_positive + over60, data = table.builder.syd)
+
+summary(reduced.sa2.lm)
+
+anova(reduced.sa2.lm, sa2.lm)
+
+```
+##Build a further reduced model
+``` {r}
+reduced.sa2.lm.2 <- lm(st_min ~ total_pop + overseas + employ + oc_positive + over60, data = table.builder.syd)
+
+summary(reduced.sa2.lm.2)
+
+anova(reduced.sa2.lm.2, sa2.lm)
+
+```
+
+The Analysis of variance suggests that reducing the model further does help to imporve the residual errors, so we will go with the second reduced model.  
+
+`reduced.sa2.lm <- lm(st_min ~ total_pop + overseas + employ + oc_positive + over60, data = table.builder.syd)`  
+
+##Model Diagnoistics
+``` {r}
+# residuals versus fitted values plot
+ols_plot_resid_fit(reduced.sa2.lm.2)
+# Breusch-Pagan test from olsrr library
+ols_test_breusch_pagan(reduced.sa2.lm.2, rhs=TRUE)
+```
+``` {r}
+table.builder.syd$residuals <- residuals(reduced.sa2.lm.2)
+```
+
+``` {r}
+ggplot(data = table.builder.syd, aes(x = st_min, y = residuals)) +
+    geom_point() +
+    scale_x_continuous(breaks = seq(0,660,60)) +
+    ggtitle("Residuals vs Outcome")
+
+ggplot(data = table.builder.syd, aes(x = total_pop, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs Total Population")
+
+ggplot(data = table.builder.syd, aes(x = overseas, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of population born overseas")
+
+ggplot(data = table.builder.syd, aes(x = childcare, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of population engaged in childcare")
+
+ggplot(data = table.builder.syd, aes(x = employ, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of population unemployed")
+
+ggplot(data = table.builder.syd, aes(x = oc_positive, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of undercrowded households")
+
+ggplot(data = table.builder.syd, aes(x = over60, y = residuals)) +
+    geom_point() +
+    ggtitle("Residuals vs % of population over 60 years")
+```
+
+##Add some transformations
+
+``` {r}
+sa2.lm.transform <- lm(st_min ~ total_pop + male + female + overseas + I(overseas^2) + childcare + I(employ^2) + 
+                         oc_positive + oc_negative + I(oc_negative^2) + sp_male + sp_female + sp_total+  student + over60, 
+                         data = table.builder.syd)
+
+summary(sa2.lm.transform)
+
+```
+
+``` {r}
+
+sa2.transform.reduce <- lm(st_min ~ total_pop + overseas + I(overseas^2) + I(employ^2) + oc_positive + over60, 
+                         data = table.builder.syd)
+
+summary(sa2.transform.reduce)
+
+anova(sa2.transform.reduce, sa2.lm.transform)
+
+```
+
+``` {r}
+
+sa2.transform.reduce2 <- lm(st_min ~ total_pop + overseas + I(overseas^2) + I(employ^2) + over60, 
+                         data = table.builder.syd)
+
+summary(sa2.transform.reduce2)
+
+anova(sa2.transform.reduce2, sa2.transform.reduce)
+
+```
+
+``` {r}
+# residuals versus fitted values plot
+ols_plot_resid_fit(sa2.transform.reduce)
+# Breusch-Pagan test from olsrr library
+ols_test_breusch_pagan(sa2.transform.reduce, rhs=TRUE)
+```
+
+``` {r}
+plot(table.builder.syd$st_min, residuals(sa2.transform.reduce))
+```
+
+## Autocorrelation of residuals
+
+Since we are working with spatial data, it is possible that our observations are going to be spatially correlated. Areas that are close to each other are going to be more similar than areas that are further apart. the Durbin-Watson tests allows us to check for autocorrelation in the residuals
+
+``` {r}
+#load car package
+library(car)
+
+#perform Durbin-Watson test on the first model (no transformations)
+durbinWatsonTest(reduced.sa2.lm.2)
+
+#perform Durbin-Watson test on the first model (no transformations)
+durbinWatsonTest(sa2.transform.reduce)
+
+
+```
+
+
+
+#Modelling the Rest of NSW dataset
+
+##Fit Univariate Linear Models
+``` {r}
+
+#functions to fit univariate regression models
+univ.lm <- function(outcome, variables) {
+  # list to store output tables
+  out <- list()
+  # count to add to list
+  count <- 1
+  # loop through the variables
+  for (i in variables) { 
+    f <- as.formula(paste(outcome, i, sep = '~'))
+    # fit the glm model and add to list
+    out[[count]] <- lm(f, data=table.builder.nsw)
+    #add to the count
+    count <- count + 1
+  }
+  return(out)
+}
+
+```
+
+``` {r}
+#fit an univarite model for each variable
+uni.mods <- univ.lm("st_min", vars)
+
+# display the coefficients and p values for each univariate model
+for (i in 1:length(vars)) {
+  print(summary(uni.mods[[i]])$coefficients)
+}
+
+```
+
+##Build a model with the variables that are significant in the univariate models
+
+__significant variables in univariate model:__ total_pop, childcare, oc_positive, student
+``` {r}
+sa2.lm <- lm(st_min ~ total_pop + childcare + oc_positive + student, data = table.builder.nsw)
+
+summary(sa2.lm)
+
+```
+
+Perhaps this suggests that there is not much relationship between the outcome and predictors?
+
+##Model Diagnositics
+``` {r}
+# residuals versus fitted values plot
+ols_plot_resid_fit(sa2.lm)
+# Breusch-Pagan test from olsrr library
+ols_test_breusch_pagan(sa2.lm, rhs=TRUE)
+```
+
+
+
+
+
+
+
