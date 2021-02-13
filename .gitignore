@@ -39,7 +39,7 @@ vignettes/*.pdf
 .Renviron
 
 # Other file types
-.Rhistory
-.DS_Store
-.html
-.pdf
+*.Rhistory
+*.DS_Store
+*.html
+*.pdf
