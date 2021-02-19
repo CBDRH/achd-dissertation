@@ -5,26 +5,34 @@ date: "09/08/2020"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # set 'data' folder as root directory
-knitr::opts_knit$set(root.dir = '/Users/calumnicholson/Documents/OneDrive - UNSW/Dissertation/data/')
-
+knitr::opts_knit$set(root.dir = '../..')
 library(dplyr)
 ```
 
 ``` {r}
-htt <- read.csv('./hospital_TT/duration_sa2_hospitals.csv')
+# Path to the study's data folder (note: accessible from UNSw oneDrive)
+study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
+
+
 ```
 
 ``` {r}
-htt_details <- read.csv('./hospital_tt/myhospitals-contact-details.csv')
+htt_details <- read.csv(paste(study_folder, './hospital_tt/myhospitals-contact-details.csv', sep = "")) %>%
+                    filter(State == "NSW" | State == "ACT" ) %>% # Select on NSw and ACT
+                    filter(Sector == "Public") # Filter out private hospitals
 ```
 
 ``` {r}
 NSW_sa2 <- read.csv('./achd-dissertation/EDA/output/sa2_table_builder.csv') %>%
                 select(SA2_5DIGITCODE_2016) %>%
                 rename('SA2_5DIG16' = SA2_5DIGITCODE_2016)
+```
+
+``` {r}
+htt <- read.csv(paste(study_folder, './hospital_TT/duration_sa2_hospitals.csv', sep = ""))
 ```
 
 ``` {r}

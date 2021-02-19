@@ -8,18 +8,23 @@ output: html_document
 ```{r setup, include=FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # set 'data' folder as root directory
-knitr::opts_knit$set(root.dir = '../..')
+knitr::opts_knit$set(root.dir = '..')
 
 library(dplyr)
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- 'C:/Users/calum.nicholson/r-projects/achd-data'
+
+# Path to the study's data folder (note: accessible from UNSw oneDrive)
+study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
 ```
 
 ## The SA2 Coding index 
 
 Allows SA2 areas to be looked up using with locality (suburb), Postcode and State.
-  
 ``` {r}
 # Import SA2 coding index
-SA2_locality <- read.csv('./ASGS/asgs2016codingindexes/2019 Locality to 2016 SA2 Coding Index.csv')
+SA2_locality <- read.csv(paste(study_folder, '/ASGS/asgs2016codingindexes/2019 Locality to 2016 SA2 Coding Index.csv', sep = ""))
 
 # filter for NSW
 SA2_locality_NSW <- SA2_locality %>%
@@ -34,7 +39,7 @@ SA2_locality_names <- SA2_locality_NSW %>%
 
 ``` {r}
 # Load the list of ASGS SA2 area names and codes
-SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv') %>%
+SA2_aus <- read.csv(paste(study_folder,'/ASGS/SA2_2016_AUST.csv', sep="")) %>%
             select(STATE_NAME_2016, SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016,
                    SA3_CODE_2016, SA3_NAME_2016, SA4_CODE_2016, SA4_NAME_2016, GCCSA_NAME_2016)
 
@@ -83,8 +88,8 @@ SA2_lookup_NSW <- SA2_locality_NSW %>%
                    select(LOCALITY_NAME, POSTCODE, SA2_MAINCODE, SA2_NAME)
 
 # write the filtered lookup table to the output folder
- write.csv(SA2_lookup_NSW, "./achd-dissertation/analysis_pipeline/output/sa2_lookup.csv")
- write.csv(ASGS_lookup, "./achd-dissertation/analysis_pipeline/output/ASGS_lookup.csv")
+ write.csv(SA2_lookup_NSW, "./analysis_pipeline/output/sa2_lookup.csv")
+ write.csv(ASGS_lookup, "./analysis_pipeline/output/ASGS_lookup.csv")
 
 ```
 

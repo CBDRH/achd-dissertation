@@ -21,7 +21,7 @@ library(leaflet.extras)
 #setwd()
 
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+pt_data <- 'C:/Users/calum.nicholson/r-projects/achd-data/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- './data/'
@@ -32,17 +32,20 @@ app_data <- './data/'
 achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
 
 #import DX coding
-dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep="")) %>% 
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
             filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
             select(!c(ACHD.Database.name, check., Variable))
 
 #import Census data
-sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep=""))
+sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+                            mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                                   IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
 
 #Import area polygons
 sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
 sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
 sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
+
 
 ################################## HEADER CONTENT #######################################
 
@@ -56,6 +59,8 @@ sidebar <- dashboardSidebar(
         menuItem("Snapshot of ACHD", tabName = "snapshot", icon = icon("dashboard")),
         # Location tab
         menuItem("Location of Patients", tabName = "locations", icon = icon("th")),
+        # Driving tab
+        menuItem("Driving Time to Clinics", tabName = "driving", icon = icon("th")),
         
         # Global Filters
         h4("Global Filters"),
@@ -137,10 +142,6 @@ body <- dashboardBody(
                              width = 12,
                              color = 'olive')
                 ),
-                #Map Customisation 
-                fluidRow(
-                    
-                ),
                 # Summary Values
                 fluidRow(valueBoxOutput('pt.count.loc', width = 3),
                          valueBoxOutput('simple.count.loc', width = 3),
@@ -168,6 +169,39 @@ body <- dashboardBody(
                 fluidRow(uiOutput('locations.summary.box')
                 ),
                 fluidRow(uiOutput('area.dx.box')
+                ),
+                fluidRow(uiOutput('area.irsd.box'),
+                         uiOutput('area.aria.box'))
+        ),
+    
+        #---------------Driving Tab-------------------#
+        tabItem(tabName = "driving",
+                #Title bar
+                fluidRow(
+                    valueBox("Driving time to ACHD Clinics",
+                             "Where are the ACHD clinics in NSw and how long do patients have to drive to reach the neareset clinic?",
+                             width = 12,
+                             color = 'olive')
+                ),
+
+                # Summary Values
+                fluidRow(valueBoxOutput('pt.count.drive', width = 3),
+                         valueBoxOutput('simple.count.drive', width = 3),
+                         valueBoxOutput('moderate.count.drive', width = 3),
+                         valueBoxOutput('complex.count.drive', width = 3)
+                ),
+                fluidRow(
+                    box(title = "Map Customisation",
+                        checkboxGroupInput("drive.gcc", "Filter by Region",
+                                           choices = c('Greater Sydney' = "Greater Sydney",
+                                                       'Rest of NSW' = "Rest of NSW",
+                                                       'ACT' = "Australian Capital Territory"),
+                                           selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
+                        actionButton("drive.update", "Update"),
+                        width = 3, height = 580
+                    ),
+                    uiOutput('driving.map.box')
+                    
                 )
         )
     )
@@ -207,8 +241,8 @@ server <- function(input, output) {
         dx.df
     })
     
-    # Create area-level ACHD data
-    set.area.achd <- reactive({
+    # ------------------------- area-level data for locations map ---------------------------- #
+    loc.area.achd <- eventReactive( input$loc.update, {
         if (input$loc.poly.select == 2) {
             achd.df <- achd.filtered() %>% rename("area" = sa2)
             TB.df <- sa2.TB %>% rename("area" = sa2_area)
@@ -241,15 +275,16 @@ server <- function(input, output) {
         area.data
     })
     
-    #select polygons for plotting 
-    set.polys <- eventReactive( input$loc.update, {
+    # ---------------------- plotting functions for locations map ------------------------------------ # 
+    #set polygons for locations map
+    loc.polys <- eventReactive( input$loc.update, {
         # select the correct shapefile
         if (input$loc.poly.select == 2) {polys <- sa2.polys} 
         else if (input$loc.poly.select == 3) {polys <- sa3.polys} 
         else {polys <- sa4.polys}
         
         # add the achd population for each area 
-        polys <- merge(polys, set.area.achd(), by.x = 'NAME16', by.y = 'area')
+        polys <- merge(polys, loc.area.achd(), by.x = 'NAME16', by.y = 'area')
         #convert NAs to 0
         #polys@data <- polys@data %>% replace_na(list('ACHD_count' = 0))
         
@@ -261,22 +296,82 @@ server <- function(input, output) {
     #Set bins for locations map
     bins.loc <- reactive({
         bins <- seq(0, 
-                    plyr::round_any(max(set.polys()$ACHD_count), 10, ceiling), 
-                    plyr::round_any(max(set.polys()$ACHD_count), 10, ceiling)/10)
+                    plyr::round_any(max(loc.polys()$ACHD_count), 10, ceiling), 
+                    plyr::round_any(max(loc.polys()$ACHD_count), 10, ceiling)/10)
         bins
     })
     
     #Set colour palette for locations map
     pal.loc <- reactive({
-        pal <- colorBin("YlOrRd", domain = set.polys()$ACHD_count, bins = bins.loc())
+        pal <- colorBin("YlOrRd", domain = loc.polys()$ACHD_count, bins = bins.loc())
         pal
     })
     
     #Set labels for locations map
     labels.loc <- reactive({
         sprintf("<strong>%s</strong><br/>%g ACHD patients in area",
-                 set.polys()$NAME16, set.polys()$ACHD_count) %>% lapply(htmltools::HTML)
+                 loc.polys()$NAME16, loc.polys()$ACHD_count) %>% lapply(htmltools::HTML)
     })
+
+    #----------------- sa2 data for driving map --------------------------------------#
+    
+    drive.area.achd <- reactive({
+    # Diagnosis severity counts in each area
+    beth.drive <- achd.filtered() %>%
+        group_by(sa2) %>%
+        dplyr::summarise(ACHD_count = n(), 
+                         beth_1 = sum(bethesda_code == 1),
+                         beth_2 = sum(bethesda_code == 2), 
+                         beth_3 = sum(bethesda_code == 3), 
+                         beth_4 = sum(bethesda_code == 4))
+    
+    # Diagnoses present in each area 
+    dx.drive <- achd.filtered() %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+        group_by(sa2) %>% 
+        dplyr::summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+    
+    # Join above to table builer data
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+    
+    area.drive
+    })
+    
+    # -------------- sa2 polys for driving map ----------------------------------- #
+    drive.polys <- eventReactive(input$drive.update, {
+        #add area data to polygons
+        drive.poly <- merge(sa2.polys, drive.area.achd(), by.x = 'NAME16', by.y = 'sa2_area')
+        
+        # Filter by the GCC areas selected
+        polys.filtered <- subset(drive.poly, drive.poly$GCC_NAME16 %in% input$loc.gcc)
+        polys.filtered
+    })
+    
+    #Set bins for locations map
+    bins.drive <- reactive({
+        bins <- seq(0, 
+                    plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling), 
+                    plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling)/10)
+        bins
+    })
+    
+    #set colour palette for driving map
+    pal.drive <- reactive({
+        pal <- colorBin("YlOrRd", domain = as.numeric(drive.polys()$shortest_time, 'hours'), bins = bins.drive())
+        pal
+    })
+    
+    labels.drive <- reactive({
+        sprintf(
+            "<strong>%s</strong><br/>%g hours by car",
+            drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
+    })
+    
+    #Set labels for driving map
     
     ############################# SNAPSHOTS TAB #################################
     
@@ -434,7 +529,7 @@ server <- function(input, output) {
         leaflet() %>%
             addTiles() %>%
             addPolygons(
-                data = set.polys(),
+                data = loc.polys(),
                 layerId = ~CODE16,
                 fillColor = ~pal.loc()(ACHD_count),
                 weight = 1,
@@ -475,7 +570,7 @@ server <- function(input, output) {
         # the area click event
         event <- input$locations.map_shape_click
         # select the correct area
-        event_area <- set.area.achd() %>% filter(SA2_5DIGIT == event$id)
+        event_area <- loc.area.achd() %>% filter(SA2_5DIGIT == event$id)
         
         #--------------CREATE BOX------------------#
         output$locations.summary.box <- renderUI({
@@ -524,10 +619,112 @@ server <- function(input, output) {
                          x = "") +
                     coord_flip()
             })
+        output$area.irsd.box <- renderUI({
+            box(title = "Disadvantage",
+                plotOutput("irsd_area_plot"),
+                width = 6, height = 580)
+            })
+        output$irsd_area_plot <- renderPlot({
+            irsd.data <- loc.area.achd() %>% select(area, SA2_5DIGIT, IRSD) 
+            
+            irsd.data$cuts <- cut(as.numeric(irsd.data$IRSD), breaks = 30, label = F)
+            coloured_cut <- irsd.data$cuts[irsd.data$SA2_5DIGIT == event$id]
+            irsd.data$color <- ifelse(irsd.data$cuts == coloured_cut[1], "Selected", "")
+            
+            irsd.data %>% filter(!is.na(IRSD)) %>%
+                ggplot(aes(x=IRSD, fill = cuts == coloured_cut[1])) +
+                geom_bar() +
+                scale_fill_manual(values = c("grey45", "red"))+
+                theme_minimal() + theme(legend.position = "none")
+            })
+        
+        output$area.aria.box <- renderUI ({
+            box(title = "Remoteness",
+                plotOutput('aria_area_plot'),
+                width = 6, height = 580)
+            })
+        output$aria_area_plot <- renderPlot ({
+            aria.long <- event_area %>% 
+                select(area, SA2_5DIGIT, major_cities:very_remote) %>%
+                pivot_longer(cols = major_cities:very_remote, names_to = "remoteness")
+            
+            aria.long$remoteness <- factor(aria.long$remoteness, levels = aria.long$remoteness)
+            
+            ggplot(data = aria.long, aes(x = factor(remoteness), y = value)) +
+                geom_col() +
+                scale_y_continuous(limits = c(0,1), labels = percent) +
+                theme_minimal()
+            
+        })
         
         
     })
     
+    ############################# DRIVING TAB #################################
+    
+    #---------------Value Boxes-------------------#
+    # Value boxes with the key data points
+    output$pt.count.drive <- renderValueBox({
+        valueBox(achd.filtered() %>% nrow(),
+                 'selected patients', 
+                 width = 3, color = 'light-blue')
+    })
+    output$simple.count.drive <- renderValueBox({
+        valueBox(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), 
+                 "Patients with Simple CHD", 
+                 color = 'light-blue')
+    })
+    output$moderate.count.drive <- renderValueBox({
+        valueBox(achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), 
+                 "Patients with Moderate CHD", 
+                 color = 'light-blue')
+    })
+    output$complex.count.drive <- renderValueBox({
+        valueBox(achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
+                 "Patients with Complex CHD", 
+                 color = 'light-blue')
+    })
+    
+    #------------------Driving Map--------------#
+    # The box containing the dirving times map
+    observeEvent(input$drive.update, {
+        output$driving.map.box <- renderUI({
+            box(leafletOutput('drive.map', height = 550),
+                width = 9, height = 580)
+        })
+    })
+    
+    # Creating the driving times map
+    output$drive.map <- renderLeaflet({
+        leaflet() %>%
+            addTiles() %>%
+            addPolygons(
+                data = drive.polys(),
+                layerId = ~CODE16,
+                fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
+                weight = 1,
+                opacity = 1,
+                color = "white",
+                dashArray = "3",
+                fillOpacity = 0.7,
+                highlight = highlightOptions(
+                    weight = 3,
+                    color = "#666",
+                    dashArray = "",
+                    fillOpacity = 0.7,
+                    bringToFront = TRUE),
+                label = labels.drive(),
+                labelOptions = labelOptions(
+                    style = list("font-weight" = "normal", padding = "3px 8px"),
+                    textsize = "15px",
+                    direction = "auto")) %>%
+            addLegend(pal = pal.drive(), 
+                      values = bins.drive(), 
+                      opacity = 0.7, 
+                      title = "Driving time to clinics",
+                      position = "bottomright")
+        
+    })
     
 }
 

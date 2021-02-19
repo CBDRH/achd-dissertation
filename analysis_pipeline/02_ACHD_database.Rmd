@@ -16,13 +16,13 @@ Check how removing missing data affects the demographics.
 knitr::opts_chunk$set(echo = TRUE)
 
 # set '2020_achd_map' folder as root directory
-knitr::opts_knit$set(root.dir = '../..')
+knitr::opts_knit$set(root.dir = '..')
 
 # Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+ACHD_path <- 'C:/Users/calum.nicholson/r-projects/achd-data/'
 
-# Path to the study's data folder (note: only accessible at RPAH)
-study_folder <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+# Path to the study's data folder (note: accessible from UNSw oneDrive)
+study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
 
 library(tidyverse)
 library(lubridate)
@@ -397,14 +397,14 @@ DX <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
         select(-adm_AbsentPA, -PA)
 
 # Import the lookup table for EPCC codes, remove the old PA diagnoses
-ACHD_to_EPCC <- read.csv('./dx_codes/ACHD_EPCC_coding.csv') %>% 
-                filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA'))
+ACHD_to_EPCC <- read.csv(paste(study_folder, '/dx_codes/ACHD_EPCC_coding.csv', sep = "")) %>% 
+                filter(!(ï..Variable == 'adm_AbsentPA' | ï..Variable == 'PA'))
 
 # Change the DX column names to the correct ECC codes
-names(DX) <- ACHD_to_EPCC$EPCC.Code[match(names(DX), ACHD_to_EPCC$Variable)]
+names(DX) <- ACHD_to_EPCC$EPCC_Code[match(names(DX), ACHD_to_EPCC$ï..Variable)]
 
 # Remove the 'achd_id' row from the ACHD to EPCC lookup table
-ACHD_to_EPCC <- filter(ACHD_to_EPCC, !(Variable == "achd_id"))
+ACHD_to_EPCC <- filter(ACHD_to_EPCC, !(ï..Variable == "achd_id"))
 ```
 
 All of the diagnosis variables code 1 or -1 for true and 0 or NA for untrue. To make it a little easier to read, we will recode -1 to 1 and NA to 0.
@@ -413,8 +413,8 @@ The death variable (FupStatus) also codes alive as NA or 0, recode all NA's to 0
 
 ``` {r}
 # all the diagnosis variables
-EPCC_codes <- as.character(ACHD_to_EPCC[["EPCC.Code"]])
-dx_names <- as.character(ACHD_to_EPCC[["Adjust.name"]])
+EPCC_codes <- as.character(ACHD_to_EPCC[["EPCC_Code"]])
+dx_names <- as.character(ACHD_to_EPCC[["Adjust_name"]])
 
 # recode the diagnoses to binary
 DX <- DX %>% mutate_at(EPCC_codes,
@@ -470,7 +470,7 @@ DEATH <- read.csv(paste(ACHD_path, 'Table_exports/DEATH.csv', sep="")) %>%
 _ASGS AREAS_
 ``` {r}
 # Import ASGS Lookup table
-asgs_lookup <- read.csv("./achd-dissertation/analysis_pipeline/output/ASGS_lookup.csv") %>%
+asgs_lookup <- read.csv("./analysis_pipeline/output/ASGS_lookup.csv") %>%
 #             ------------Clean up the data-----------------  
               # select subrub, postcode and sa2 name columns
               select(LOCALITY_NAME,POSTCODE,SA2_NAME, SA3_NAME, SA4_NAME, GCC_NAME) %>% 
@@ -597,7 +597,7 @@ address_cleaning_list <- person.level %>% filter(valid_address == 1) %>%
 
 address_cleaning_list
 
-write.csv(address_cleaning_list, paste(study_folder, 'output/test_', Sys.Date(), '.csv', sep=""))
+write.csv(address_cleaning_list, paste(ACHD_path, 'output/test_', Sys.Date(), '.csv', sep=""))
 ```
 
 __Cleaning Data Types__
@@ -949,7 +949,7 @@ dx.count.filtered <- dx.only.filtered %>%
             t() 
 
 # Convert to data frame and clean
-dx.count.filtered <- as.data.frame(dxCR3.count.filtered)
+dx.count.filtered <- as.data.frame(dx.count.filtered)
 dx.count.filtered$dx_name <- dx_names
 
 # plot the frequency of each diagnosis
@@ -966,14 +966,14 @@ _Disease Severity_
 ggplot(person.level, aes(x=bethesda_code)) +
   geom_bar(aes( y = ..count../sum(..count..)))+
   scale_y_continuous(limits = c(0,1), labels = percent) +
-  labs(title = "death", 
+  labs(title = "disease severity", 
        y = "Percent", 
        x = "death")
 
 ggplot(person.level.filtered, aes(x=bethesda_code)) +
   geom_bar(aes( y = ..count../sum(..count..)))+
   scale_y_continuous(limits = c(0,1), labels = percent) +
-  labs(title = "death", 
+  labs(title = "disease severity", 
        y = "Percent", 
        x = "death")
 ```
@@ -1036,17 +1036,17 @@ mcs_pass <- readline(prompt="enter a password for the mastercode sheet: ")
 master_code_sheet <- person.level.filtered %>% select(achd_id, dob, sex, suburb, postcode, state)
 # write the master code sheet to an excel spreadsheet
 write.xlsx(x = master_code_sheet,
-           file = paste(study_folder, 'master_code_sheet/RPAH_master_code_sheet_', Sys.Date(), '.xlsx', sep=""),
+           file = paste(ACHD_path, 'master_code_sheet/RPAH_master_code_sheet_', Sys.Date(), '.xlsx', sep=""),
            sheetName = "master_code_sheet",
            password = mcs_pass)
 
 #Save the analysis data set
 analysis_dataset <- person.level.filtered %>% select(-dob, -suburb, -postcode, -state)
 #write the analysis dataset to a csv file and an R data file
-saveRDS(analysis_dataset, file = paste(study_folder, 'output/rpah_analysis_dataset_', Sys.Date(), '.rds', sep=""))
+saveRDS(analysis_dataset, file = paste(ACHD_path, 'output/rpah_analysis_dataset_', Sys.Date(), '.rds', sep=""))
 #cannot save the nested 'clinics columns as csv
 analysis_dataset %>% select(-clinics,-clinics_2000) %>%
-      write.csv(paste(study_folder, 'output/rpah_analysis_dataset_', Sys.Date(), '.csv', sep=""))
+      write.csv(paste(ACHD_path, 'output/rpah_analysis_dataset_', Sys.Date(), '.csv', sep=""))
 ```
 
 

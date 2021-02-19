@@ -8,10 +8,16 @@ output: html_document
 ```{r setup, include=FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # set 'data' folder as root directory
-knitr::opts_knit$set(root.dir = '../..')
+knitr::opts_knit$set(root.dir = '..')
 
 library(tidyverse)
 library(lubridate)
+
+# Path to ACHD database data (note: only accessible at RPAH)
+ACHD_path <- 'C:/Users/calum.nicholson/r-projects/achd-data'
+
+# Path to the study's data folder (note: accessible from UNSw oneDrive)
+study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
 ```
 
 ## Function For importing Table Builder data 
@@ -23,7 +29,7 @@ Each table row in this folder is an SA2 area for NSW, with the columns describin
 
 ``` {r}
 # Function to import and clean SA2 Tables
-read.SA2.table <-function (filename, path = "./Table_builder_SA2/") {
+read.SA2.table <-function (filename, path = paste(study_folder, "./Table_builder_SA2/", sep ="")) {
   
 #    ```
 #    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #    areas, and converts it to a dataframe
@@ -365,7 +371,7 @@ ggplot(data = datalong, aes(x = factor(remoteness), y = value)) +
 __Add SA Codes to dataset__
 ``` {r}
 # Load the list of ASGS SA2 area names and codes
-SA2_aus <- read.csv('./ASGS/SA2_2016_AUST.csv')
+SA2_aus <- read.csv(paste(study_folder, '/ASGS/SA2_2016_AUST.csv', sep=""))
 
 # Filter for NSW and select onyl SA2 associated columns
 SA2_nsw <- SA2_aus %>%
@@ -387,7 +393,7 @@ This data contains the distance between each SA2 area in australia and each hosp
 
 ``` {r}
 # import the hospital travel times data
-htt <- read.csv('./hospital_TT/duration_sa2_hospitals.csv') %>%
+htt <- read.csv(paste( study_folder, '/hospital_TT/duration_sa2_hospitals.csv', sep="")) %>%
 #         ------------Clean up the data-------------------------  
           # select columns, sa2 code and ACHD locations          
           select(SA2_5DIG16, time_to_646, time_to_755, time_to_152, 
@@ -421,18 +427,19 @@ sa2.data16 <- left_join(sa2.data15, htt, by = 'SA2_5DIGIT') %>%
                     shortest_time = duration(shortest_time, "seconds"),)
 ```
 
+
 ``` {r}
 # Final table
 knitr::kable(head(sa2.data16))
 
 #save as csv and r data file
-write.csv(sa2.data16, "./achd-dissertation/analysis_pipeline/output/sa2_table_builder.csv")
-saveRDS(sa2.data16, file = "./achd-dissertation/analysis_pipeline/output/sa2_table_builder.rds")
+write.csv(sa2.data16, "./analysis_pipeline/output/sa2_table_builder.csv")
+saveRDS(sa2.data16, file = "./analysis_pipeline/output/sa2_table_builder.rds")
 
 ```
 
 ``` {r}
-test <- readRDS(file = "./achd-dissertation/analysis_pipeline/output/sa2_table_builder.rds")
+test <- readRDS(file = "./analysis_pipeline/output/sa2_table_builder.rds")
 ```
 
 

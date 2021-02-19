@@ -19,8 +19,13 @@ library(sjmisc)
 ```
 
 ``` {r}
+getwd()
+
+```
+
+``` {r message=FALSE, warning=FALSE, include=FALSE}
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+pt_data <- 'C:/Users/calum.nicholson/r-projects/achd-data/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- '../ACHD_Dashboard/data/'
@@ -29,12 +34,14 @@ app_data <- '../ACHD_Dashboard/data/'
 achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
 
 #import DX coding
-dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep="")) %>% 
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
             filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
             select(!c(ACHD.Database.name, check., Variable))
 
 #import Census data
-sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep=""))
+sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+                  mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                         IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
 ```
 
 > y <- achd.test %>% select(sa2, dx_codes$EPCC) %>%
@@ -89,6 +96,40 @@ ggplot(area.dx, aes(x = dx_label, y=dx_count)) +
                          y = "count",
                          x = "") +
                     coord_flip()
+```
+
+``` {r}
+
+test <- area.data %>% select(area, SA2_5DIGIT, IRSD, male) %>%
+                      mutate(male = replace(male, male == Inf, NA))
+
+
+test$cuts <- cut(as.numeric(test$IRSD), breaks = 10, label = F)
+#coloured_cut <- test$cuts[test$SA2_5DIGIT == 11007]
+test$color <- ifelse(test$cuts == test$cuts[test$SA2_5DIGIT == 11007][1], "Selected", "")
+
+test %>% filter(!is.na(IRSD)) %>%
+          ggplot(aes(x=IRSD, fill = cuts == test$cuts[test$SA2_5DIGIT == 11007][1])) +
+                geom_bar() +
+                scale_fill_manual(values = c("grey45", "red"))+
+                theme_minimal() + theme(legend.position = "none")
+```
+
+``` {r}
+library(scales)
+
+rem.test <- area.data %>% select(area, SA2_5DIGIT, major_cities:very_remote) 
+
+  datalong <- rem.test %>% filter(SA2_5DIGIT == 11007) %>%
+                pivot_longer(cols = major_cities:very_remote, names_to = "remoteness")
+
+datalong$remoteness <- factor(datalong$remoteness, levels = datalong$remoteness)
+
+ggplot(data = datalong, aes(x = factor(remoteness), y = value)) +
+  geom_col() +
+  scale_y_continuous(limits = c(0,1), labels = percent) +
+  theme_minimal()
+
 ```
 
 ``` {r}
@@ -157,6 +198,32 @@ polys$NAME16[polys$CODE16 == id]
 ```
 
 
-
+%>%
+            addPolygons(
+                data = drive.polys(),
+                layerId = ~CODE16,
+                fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
+                weight = 1,
+                opacity = 1,
+                color = "white",
+                dashArray = "3",
+                fillOpacity = 0.7,
+                highlight = highlightOptions(
+                    weight = 3,
+                    color = "#666",
+                    dashArray = "",
+                    fillOpacity = 0.7,
+                    bringToFront = TRUE),
+                label = labels.drive(),
+                labelOptions = labelOptions(
+                    style = list("font-weight" = "normal", padding = "3px 8px"),
+                    textsize = "15px",
+                    direction = "auto")) %>%
+            addLegend(pal = pal.drive(), 
+                      values = bins.drive(), 
+                      opacity = 0.7, 
+                      title = "Driving time to clinics",
+                      position = "bottomright")
+        
 
 
