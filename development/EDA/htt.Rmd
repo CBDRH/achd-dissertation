@@ -9,8 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 # set 'data' folder as root directory
 knitr::opts_knit$set(root.dir = '../..')
-library(dplyr)
+library(tidyverse)
 ```
+
+
 
 ``` {r}
 # Path to the study's data folder (note: accessible from UNSw oneDrive)
@@ -20,35 +22,128 @@ study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
 ```
 
 ``` {r}
+# load the sa2 lookup data
+asgs_lookup <- read.csv('./analysis_pipeline/output/ASGS_lookup.csv') %>%
+                select(LOCALITY_NAME, POSTCODE, STATE, SA2_NAME, SA2_5DIGIT, GCC_NAME) %>%
+                # Convert postcode to character
+                mutate_at("POSTCODE", as.character) %>%    
+                # Convert suburb name to character
+                mutate_at("LOCALITY_NAME", as.character)  
+```
+
+``` {r}
+# load the hospital deatils dataset
 htt_details <- read.csv(paste(study_folder, './hospital_tt/myhospitals-contact-details.csv', sep = "")) %>%
-                    filter(State == "NSW" | State == "ACT" ) %>% # Select on NSw and ACT
-                    filter(Sector == "Public") # Filter out private hospitals
+                    filter(State == "NSW" | State == "ACT" ) %>% # Select only NSw and ACT
+                    # Change all suburbs to uppercase
+                    mutate_at("Suburb", str_to_upper, locale = "en") %>% 
+                    # Convert suburb from to character format
+                    mutate_at("Suburb", as.character) %>%     
+                    # Convert postcode to character format
+                    mutate_at("Postcode", as.character) %>%
+                    # Convert state to character format
+                    mutate_at("State", as.character) %>%
+                    # fixing some of the subrub/postcodes for matching
+                    mutate(
+                       Postcode = replace(Postcode, Suburb == 'CAMPERDOWN', 2006),
+                       Postcode = replace(Postcode, Suburb == 'CONCORD', 2137),
+                       Postcode = replace(Postcode, Suburb == 'GOODOOGA', 2838),
+                       Suburb = replace(Suburb, Hospital.name == 'Illawarra Mental Health Services', 'WOLLONGONG'),
+                       Postcode = replace(Postcode, Suburb == 'MACQUARIE UNIVERSITY', 2113),
+                       Postcode = replace(Postcode, Suburb == 'CHATSWOOD', 2067),
+                    ) %>%
+                    #add ASGS area deatils to each hospital
+                    left_join(asgs_lookup, by = c("Suburb" = "LOCALITY_NAME", 
+                                                   "Postcode" = "POSTCODE",
+                                                   "State" = "STATE"))
+
 ```
 
 ``` {r}
-NSW_sa2 <- read.csv('./achd-dissertation/EDA/output/sa2_table_builder.csv') %>%
-                select(SA2_5DIGITCODE_2016) %>%
-                rename('SA2_5DIG16' = SA2_5DIGITCODE_2016)
+# Get sa2 area list
+sa2_areas <- read.csv('./analysis_pipeline/output/sa2_table_builder.csv') %>% select(SA2_5DIGIT)
+
+
+
 ```
 
 ``` {r}
-htt <- read.csv(paste(study_folder, './hospital_TT/duration_sa2_hospitals.csv', sep = ""))
+# Load the hospital travel time data
+htt <- read.csv(paste(study_folder, './hospital_TT/duration_sa2_hospitals.csv', sep = "")) %>%
+                rename("SA2_5DIGIT" = SA2_5DIG16) %>%
+                inner_join(sa2_areas, by = 'SA2_5DIGIT') # filter for only NSW/ACT areas
 ```
 
 ``` {r}
-htt_achd_NSW <- htt %>%
-                  select(SA2_5DIG16, time_to_646, time_to_755, time_to_152, 
-                         time_to_683, time_to_737, time_to_979) %>%
-                  inner_join(NSW_sa2, by = 'SA2_5DIG16') %>%
-                  rename("time_to_orange" = time_to_646,
-                         "time_to_nowra" = time_to_755,
-                         "time_to_canberra" = time_to_152,
-                         "time_to_port" = time_to_683,
-                         "time_to_rpa" = time_to_737,
-                         "time_to_westmead" = time_to_979) %>%
-                  mutate(shortest_time = pmin(time_to_orange,time_to_nowra,time_to_canberra,
-                                             time_to_port,time_to_rpa,time_to_westmead))
-        
+#filter for only NSw/ACT hospitals
+htt_nsw <- htt
+
+# remove the extra text from columns for easy matching to hospital IDs
+names(htt_nsw) <- gsub("time_to_", "", names(htt_nsw))
+
+#Match column names with hosptial ids to select only hospitals from NSw/ACT
+htt_nsw <- htt_nsw %>% select(SA2_5DIGIT, as.character(htt_details$Hospital_ID))
+```
+
+
+
+
+
+
+ACHD clinics in NSW/ACT are (some hospitals are not explicitly listed so the closed hospital in the htt list has been used:
+  - Orange Central West Cardiology - 646
+  - Nowra Shoalhaven Cardiology - 755
+  - Canberra More Than Medicine - 152
+  - Port Macquarie Cardiology - 683
+  - Darwin Private Hospital - 230 - leave this one out nto in NSW/ACT
+  - Royal Prince Alfred hoispital - 737
+  - Westmead Private Hospital - 979
+  - John Hunter Hospital Newcaslte - 408
+
+
+``` {r}
+achd_ids <- c(646, 755, 152, 683, 737, 979, 408)
+
+# create lookup table for hospitals with ACHD clinics
+achd_hospitals <- htt_details %>% filter(Hospital_ID %in% achd_ids)
+
+```
+
+%>%
+                mutate(shortest_time = pmin('646', '755', '152', '683', '230', '737', '979', '408'))
+
+``` {r}
+achd_ids <- c(646, 755, 152, 683, 737, 979, 408)
+
+new_achd_ids <- achd_ids
+
+new_id <- 472
+```
+
+```{r}
+if (!(new_id %in% new_achd_ids)) { new_achd_ids <- append(new_achd_ids, new_id) } else {print('already)}
+```
+
+
+``` {r}
+htt_achd <- htt_nsw %>%
+                select(SA2_5DIGIT, as.character(new_achd_ids)) %>%
+                mutate(shortest_time = pmap_dbl(
+                                           .l = select(., -SA2_5DIGIT),
+                                           .f = function(...) min(...)
+                                         ),
+                       shortest_time = duration(shortest_time, "seconds"))
+                         
+```
+
+colnames(htt_achd)[apply(htt_achd[-1],1,which.min)])
+
+
+``` {r}
+sa2TB <- read.csv('./analysis_pipeline/output/sa2_table_builder.csv')
+
+test <- mutate(sa2TB, shortest_time = apply(htt_achd[-1], 1, FUN=min))
+
 ```
 
 ``` {r}

@@ -424,7 +424,7 @@ sa2.data16 <- left_join(sa2.data15, htt, by = 'SA2_5DIGIT') %>%
                     time_to_port = duration(time_to_port, "seconds"),
                     time_to_rpa = duration(time_to_rpa, "seconds"),
                     time_to_westmead = duration(time_to_westmead, "seconds"),
-                    shortest_time = duration(shortest_time, "seconds"),)
+                    shortest_time = duration(shortest_time, "seconds"))
 ```
 
 
