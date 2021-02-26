@@ -18,11 +18,6 @@ library(ggplot2)
 library(sjmisc)
 ```
 
-``` {r}
-getwd()
-
-```
-
 ``` {r message=FALSE, warning=FALSE, include=FALSE}
 # Path to ACHD database data (note: only accessible at RPAH)
 pt_data <- 'C:/Users/calum.nicholson/r-projects/achd-data/'

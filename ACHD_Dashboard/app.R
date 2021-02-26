@@ -21,7 +21,7 @@ library(leaflet.extras)
 #setwd()
 
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'C:/Users/calum.nicholson/r-projects/achd-data/'
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- './data/'
@@ -54,7 +54,6 @@ new_achd_ids <- achd_ids
 sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
 sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
 sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
-
 
 ################################## HEADER CONTENT #######################################
 
@@ -207,24 +206,37 @@ body <- dashboardBody(
                                                        'ACT' = "Australian Capital Territory"),
                                            selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
                         actionButton("drive.update", "Update"),
-                        uiOutput('phn.selector'),
+                        width = 4, height = 340
+                    ),
+                    box(uiOutput('phn.selector'),
                         uiOutput('lhn.selector'),
                         uiOutput('hospital.selector'),
-                        actionButton("drive.add", "Add Clinic"),
-                        width = 3, height = 580
+                        uiOutput('clinic.button.add'),
+                        uiOutput('clinic.button.reset'),
+                        width = 4, height = 340
                     ),
-                    uiOutput('driving.map.box')
+                    box(title = "New Clinics",
+                        uiOutput('new.clinics.output'),
+                        width = 4, height = 340),
+                ),
+                fluidRow(uiOutput('driving.map.box')
                     
                 )
         )
     )
 )
 
-# Define UI for application that draws a histogram
+# Define UI for application
 ui <- dashboardPage(header, sidebar, body)
 
-# Define server logic required to draw a histogram
+# Define server logic
 server <- function(input, output) {
+    
+    # Function to search for input names
+    getInputs <- function(pattern){
+        reactives <- names(reactiveValuesToList(input))
+        reactives[grep(pattern,reactives)]
+    }
     
 ############################# REACTIVE FUNCTIONS #################################
     
@@ -353,39 +365,6 @@ server <- function(input, output) {
     
     area.drive
     })
-    
-    # -------------- sa2 polys for driving map ----------------------------------- #
-    drive.polys <- eventReactive(input$drive.update, {
-        #add area data to polygons
-        drive.poly <- merge(sa2.polys, drive.area.achd(), by.x = 'NAME16', by.y = 'sa2_area')
-        
-        # Filter by the GCC areas selected
-        polys.filtered <- subset(drive.poly, drive.poly$GCC_NAME16 %in% input$loc.gcc)
-        polys.filtered
-    })
-    
-    #Set bins for locations map
-    bins.drive <- reactive({
-        bins <- seq(0, 
-                    plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling), 
-                    plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling)/10)
-        bins
-    })
-    
-    #set colour palette for driving map
-    pal.drive <- reactive({
-        pal <- colorBin("YlOrRd", domain = as.numeric(drive.polys()$shortest_time, 'hours'), bins = bins.drive())
-        pal
-    })
-    
-    #Set labels for driving map
-    labels.drive <- reactive({
-        sprintf(
-            "<strong>%s</strong><br/>%g hours by car",
-            drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
-    })
-    
-    
     
 ############################# SNAPSHOTS TAB #################################
     
@@ -699,126 +678,190 @@ server <- function(input, output) {
                  color = 'light-blue')
     })
     
-    #------------------Driving Map--------------#
+    #------------------Map Options----------------#
     # this phn selector
     output$phn.selector <- renderUI({
-        selectInput('phn.type', 'Select Primary Health Network Area:',
+        selectizeInput('phn.type', 'Select Primary Health Network Area:',
                     choices = unique(htt.details$Primary.Health.Network.area..PHN.),
-                    selected = NULL)
+                    options = list(
+                        placeholder = 'Please select an option below',
+                        onInitialize = I('function() { this.setValue(""); }'))
+        )
     })
     
-    # The lhm selector
-    output$lhn.selector <- renderUI({
+    # The lhn selector
+    observeEvent(input$phn.type, {
         
-        available.lhn <- htt.details %>% filter(Primary.Health.Network.area..PHN. == input$phn.type)
+        if (input$phn.type != "") {
         
-        selectInput('lhn.type', 'Select Local Hospital Network Area:',
-                    choices = unique(available.lhn$Local.Hospital.Network..LHN.),
-                    selected = NULL)
+        output$lhn.selector <- renderUI({
+            
+            available.lhn <- htt.details %>% filter(Primary.Health.Network.area..PHN. %in% input$phn.type)
+            
+            selectizeInput('lhn.type', 'Select Local Hospital Network Area:',
+                        choices = unique(available.lhn$Local.Hospital.Network..LHN.),
+                        options = list(
+                            placeholder = 'Please select an option below',
+                            onInitialize = I('function() { this.setValue(""); }'))
+            )
         })
         
+        }
+    }, ignoreInit = TRUE)
+        
     # The hospital selector
-    output$hospital.selector <- renderUI({
+    observeEvent(input$lhn.type, {
         
+        if (input$lhn.type != "") {
         
-        available.hosp <- htt.details %>% filter(Primary.Health.Network.area..PHN. == input$phn.type) %>%
-                                          filter(Local.Hospital.Network..LHN. == input$lhn.type)
+        output$hospital.selector <- renderUI({
+            
+            
+            available.hosp <- htt.details %>% filter(Primary.Health.Network.area..PHN. %in% input$phn.type) %>%
+                                              filter(Local.Hospital.Network..LHN. %in% input$lhn.type)
+            
+            selectizeInput('hospital', 'Select Hospital:',
+                        choices = unique(available.hosp$Hospital.name),
+                        options = list(
+                            placeholder = 'Please select an option below',
+                            onInitialize = I('function() { this.setValue(""); }'))
+            )
+        })
         
-        selectInput('hospital', 'Select Hospital:',
-                    choices = unique(available.hosp$Hospital.name),
-                    selected = NULL)
+        }
+    }, ignoreInit = TRUE)
+    
+    # Add and Reset Clinics buttons
+    observeEvent(input$hospital, {
+        
+        if (input$hospital != "") {
+            
+            output$clinic.button.add <-  renderUI({
+                actionButton("drive.add", "Add Clinic")
+            })
+            
+            output$clinic.button.reset <-  renderUI({
+                actionButton("drive.clinic.reset", "Reset Clinics")
+            })
+            
+        }
     })
     
+    #-------------Reactive Values for Driving Map
+    drive.values <- reactiveValues()
+    #For creating and editing the clinics table
+    drive.values$clinic_table <- data.frame(Hospital = as.character(), 
+                                            ID = as.character(), 
+                                            stringsAsFactors = FALSE)
+    #For tracking the ACHD clinic IDs selected
+    drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+    #For the area level data
+    observe({ drive.values$area_data <- drive.area.achd() })
     
-    # The box containing the dirving times map
+    # When new clinics are added ('Add Clinic' Button is clicked), do the following
+    observeEvent(input$drive.add, {
+        
+        # The hospital ID that was selected
+        hospital_id <- htt.details$Hospital_ID[htt.details$Hospital.name == input$hospital]
+        
+        # New row to add to clinic table
+        new.row <- isolate(data.frame(Hospital = input$hospital, ID = hospital_id, stringsAsFactors = FALSE))
+        
+        # Add the new row to the clinic table, if it wasnt already selected
+        if ( !(hospital_id %in% isolate(drive.values$clinic_table$ID)) )
+        { isolate(drive.values$clinic_table <- rbind(drive.values$clinic_table, new.row)) }
+        
+        # Display the table
+        output$new.clinics.output <- renderUI({
+            output$new.clinics.table <- renderTable(drive.values$clinic_table)
+            tableOutput("new.clinics.table")
+        })
+        
+        # Add the new hospital id to the clinics id list
+        if ( !(hospital_id %in% isolate(drive.values$new_achd_ids)) ) 
+        { isolate(drive.values$new_achd_ids <- append(drive.values$new_achd_ids, hospital_id)) }
+        
+        # Use the new clinics id list to recalculate the driving time to the nearest hospital
+        shortest_time_new <- htt.nsw %>%
+            select(SA2_5DIGIT, as.character(drive.values$new_achd_ids)) %>%
+            mutate(shortest_time = pmap_dbl(
+                .l = select(., -SA2_5DIGIT),
+                .f = function(...) min(...)),
+                shortest_time = duration(shortest_time, "seconds")) %>%
+            select(SA2_5DIGIT, shortest_time)
+        
+        # Add the new shortest dirving time column into the area data
+        drive.values$area_data <- drive.values$area_data %>%
+            select(-shortest_time) %>%
+            left_join(shortest_time_new, by = "SA2_5DIGIT")
+    })
+    
+    # Reset the ACHD clinics list ('Reset Clinics' Button is clicked)
+    observeEvent(input$drive.clinic.reset, {
+
+        # Clear the clinics table
+        drive.values$clinic_table <- NULL
+        
+        # Display the table as nothing
+        output$new.clinics.output <- renderUI({
+            output$new.clinics.table <- renderTable(drive.values$clinic_table)
+            tableOutput("new.clinics.table")
+        })
+        
+        # Reset the achd clinic ids to the original clinics
+        drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+        
+        # Reset the area data
+        drive.values$area_data <- drive.area.achd()
+    })
+    
+    # -------------- sa2 polys for driving map ----------------------------------- #
+    drive.polys <- eventReactive(input$drive.update, {
+        #add area data to polygons
+        drive.poly <- merge(sa2.polys, drive.values$area_data, by.x = 'NAME16', by.y = 'sa2_area')
+        
+        # Filter by the GCC areas selected
+        polys.filtered <- subset(drive.poly, drive.poly$GCC_NAME16 %in% input$drive.gcc)
+        polys.filtered
+    })
+    
+    #Set bins for locations map
+    bins.drive <- reactive({
+        bins <- seq(0, 
+                    plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling), 
+                    plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling)/10)
+        bins
+    })
+    
+    #set colour palette for driving map
+    pal.drive <- reactive({
+        pal <- colorBin("YlOrRd", domain = as.numeric(drive.polys()$shortest_time, 'hours'), bins = bins.drive())
+        pal
+    })
+    
+    #Set labels for driving map
+    labels.drive <- reactive({
+        sprintf(
+            "<strong>%s</strong><br/>%g hours by car",
+            drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
+    })
+    
+    # The box containing the driving times map
     observeEvent(input$drive.update, {
         output$driving.map.box <- renderUI({
             box(leafletOutput('drive.map', height = 550),
                 width = 9, height = 580)
         })
-    })
     
-    # Creating the driving times map
-    output$drive.map <- renderLeaflet({
-        leaflet() %>%
-            addTiles() %>%
-            addPolygons(
-                data = drive.polys(),
-                layerId = ~CODE16,
-                fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = labels.drive(),
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-            addLegend(pal = pal.drive(), 
-                      values = bins.drive(), 
-                      opacity = 0.7, 
-                      title = "Driving time to clinics",
-                      position = "bottomright")
-        
-    })
     
-    drive.polys.add <- eventReactive(input$drive.add, {
-        new_clinic_id <- htt.details$Hospital_ID[htt.details$Hospital.name == input$hospital]
-        
-        if (!(new_clinic_id %in% new_achd_ids)) { new_achd_ids <- append(new_achd_ids, new_clinic_id) }
-        
-        htt.achd <- htt.nsw %>%
-            select(SA2_5DIGIT, as.character(new_achd_ids)) %>%
-            mutate(shortest_time_new = pmap_dbl(
-                .l = select(., -SA2_5DIGIT),
-                .f = function(...) min(...)),
-                shortest_time_new = duration(shortest_time_new, "seconds")) %>%
-            select(SA2_5DIGIT, shortest_time_new)
-        
-        add.polys <- merge(drive.polys(), htt.achd, by.x = 'CODE16', by.y = 'SA2_5DIGIT')
-        
-        add.polys
-    })
-    
-    #Set bins for locations map
-    bins.drive.add <- reactive({
-        bins <- seq(0, 
-                    plyr::round_any(max(as.numeric(drive.polys.add()$shortest_time_new, 'hours'), na.rm = TRUE), 10, ceiling), 
-                    plyr::round_any(max(as.numeric(drive.polys.add()$shortest_time_new, 'hours'), na.rm = TRUE), 10, ceiling)/10)
-        bins
-    })
-    
-    #set colour palette for driving map
-    pal.drive.add <- reactive({
-        pal <- colorBin("YlOrRd", domain = as.numeric(drive.polys.add()$shortest_time_new, 'hours'), bins = bins.drive.add())
-        pal
-    })
-    
-    #Set labels for driving map
-    labels.drive.add <- reactive({
-        sprintf(
-            "<strong>%s</strong><br/>%g hours by car",
-            drive.polys.add()$NAME16, as.numeric(drive.polys.add()$shortest_time_new, 'hours')) %>% lapply(htmltools::HTML)
-    })
-    
-    # Adding clinics and recalculating shortest time
-    observeEvent(input$drive.add, {
         # Creating the driving times map
         output$drive.map <- renderLeaflet({
             leaflet() %>%
                 addTiles() %>%
                 addPolygons(
-                    data = drive.polys.add(),
+                    data = drive.polys(),
                     layerId = ~CODE16,
-                    fillColor = ~pal.drive.add()(as.numeric(drive.polys.add()$shortest_time_new, 'hours')),
+                    fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
                     weight = 1,
                     opacity = 1,
                     color = "white",
@@ -830,23 +873,20 @@ server <- function(input, output) {
                         dashArray = "",
                         fillOpacity = 0.7,
                         bringToFront = TRUE),
-                    label = labels.drive.add(),
+                    label = labels.drive(),
                     labelOptions = labelOptions(
                         style = list("font-weight" = "normal", padding = "3px 8px"),
                         textsize = "15px",
                         direction = "auto")) %>%
-                addLegend(pal = pal.drive.add(), 
-                          values = bins.drive.add(), 
+                addLegend(pal = pal.drive(), 
+                          values = as.numeric(drive.polys()$shortest_time, 'hours'), 
                           opacity = 0.7, 
                           title = "Driving time to clinics",
                           position = "bottomright")
             
         })
-        
-        
-        
-    })
     
+    })
     
 }
 

@@ -121,7 +121,7 @@ new_id <- 472
 ```
 
 ```{r}
-if (!(new_id %in% new_achd_ids)) { new_achd_ids <- append(new_achd_ids, new_id) } else {print('already)}
+if (!(new_id %in% new_achd_ids)) { new_achd_ids <- append(new_achd_ids, new_id) } else {print('already')}
 ```
 
 

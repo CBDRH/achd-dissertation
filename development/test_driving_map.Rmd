@@ -1,0 +1,221 @@
+---
+title: "test_driving_map"
+author: "Calum Nicholson"
+date: "26/02/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(shinydashboard)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(rgdal)
+library(sp)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+
+```
+
+
+``` {r}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+app_data <- '../ACHD_Dashboard/data/'
+
+```
+
+
+``` {r}
+################################## LOAD DATA ############################################
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD.Database.name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+                            mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                                   IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+
+#import htt data
+htt.nsw <- readRDS(file = paste(app_data, 'AP_output/htt_nsw.rds', sep=""))
+htt.details <- readRDS(file = paste(app_data, 'AP_output/htt_details.rds', sep=""))
+
+#current achd clinics
+achd_ids <- c(646, 755, 152, 683, 737, 979)
+#placeholer for adding new clinics
+new_achd_ids <- achd_ids
+
+#Import area polygons
+sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
+
+```
+
+``` {r}
+
+prepare.area.data <- function(achd_data) {
+    # Diagnosis severity counts in each area
+    beth.drive <- achd_data %>%
+        group_by(sa2) %>%
+        dplyr::summarise(ACHD_count = n(), 
+                         beth_1 = sum(bethesda_code == 1),
+                         beth_2 = sum(bethesda_code == 2), 
+                         beth_3 = sum(bethesda_code == 3), 
+                         beth_4 = sum(bethesda_code == 4))
+    
+    # Diagnoses present in each area 
+    dx.drive <- achd_data %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+        group_by(sa2) %>% 
+        summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+    
+    # Join above to table builer data
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+    
+    area.drive
+    }
+
+
+
+
+```
+
+``` {r}
+area.achd <- prepare.area.data(achd)
+```
+
+``` {r}
+achd_ids <- c(646, 755, 152, 683, 737, 979, 408)
+
+new_achd_ids <- achd_ids
+```
+
+
+``` {r}
+add.id <- function(id, id_list) {
+if (!(id %in% id_list)) { id_list <- append(id_list, id) }
+  
+  id_list
+}
+
+reset.ids <- function(original_ids, id_list) {
+  id_list <- original_ids
+  
+  id_list
+}
+```
+
+
+``` {r}
+new_achd_ids <- add.id(472, new_achd_ids)
+new_achd_ids <- add.id(107, new_achd_ids)
+new_achd_ids <- add.id(332, new_achd_ids)
+```
+
+``` {r}
+shortest_time_new <- htt.nsw %>%
+                select(SA2_5DIGIT, as.character(new_achd_ids)) %>%
+                mutate(shortest_time = pmap_dbl(
+                                           .l = select(., -SA2_5DIGIT),
+                                           .f = function(...) min(...)
+                                         ),
+                       shortest_time = duration(shortest_time, "seconds")) %>%
+                select(SA2_5DIGIT, shortest_time)
+```
+
+``` {r}
+area.achd.new <- area.achd %>%
+                    select(-shortest_time) %>%
+                    left_join(shortest_time_new, by = "SA2_5DIGIT")
+```
+
+``` {r}
+test <- cbind(area.achd$shortest_time, area.achd.new$shortest_time) %>%
+          as.data.frame() %>%
+          mutate(diff = V1 - V2)
+```
+
+``` {r}
+new_achd_ids <- reset.ids(achd_ids, new_achd_ids)
+```
+
+``` {r}
+area.achd.new <- area.achd
+```
+
+``` {r}
+test <- cbind(area.achd$shortest_time, area.achd.new$shortest_time) %>%
+          as.data.frame() %>%
+          mutate(diff = V1 - V2)
+```
+
+
+``` {r}
+new.hosp.df <- data.frame(Hospital = as.character(), ID = as.numeric(), stringsAsFactors = FALSE)
+
+new.row <- data.frame(Hospital = htt.details$Hospital.name[htt.details$Hospital_ID == 472], ID = 472, stringsAsFactors = FALSE)
+
+```
+
+``` {r}
+rbind(new.hosp.df, new.row)
+
+
+```
+
+
+``` {r}
+new.hosp.df[nrow(new.hosp.df)+1,] <- c(htt.details$Hospital.name[htt.details$Hospital_ID == 472], 472)
+```
+
+``` {r}
+new.hosp.df[nrow(new.hosp.df)+1,] <- c(htt.details$Hospital.name[htt.details$Hospital_ID == 107], 107)
+
+```
+
+``` {r}
+new.hosp.df[nrow(new.hosp.df)+1,] <- c(htt.details$Hospital.name[htt.details$Hospital_ID == 332], 332)
+
+```
+
+``` {r}
+gcc.filt <- area.achd.new %>% filter(GCC_NAME == 'Greater Sydney')
+
+
+```
+
+
+``` {r}
+seq(0, 
+    plyr::round_any(max(as.numeric(gcc.filt$shortest_time, 'hours'), na.rm = TRUE), 1, ceiling), 
+    plyr::round_any(max(as.numeric(gcc.filt$shortest_time, 'hours'), na.rm = TRUE), 1, ceiling)/10)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
