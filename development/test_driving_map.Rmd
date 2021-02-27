@@ -208,7 +208,55 @@ seq(0,
 
 
 
+``` {r}
+       # Creating the driving times map
+        output$drive.map <- renderLeaflet({
+            leaflet() %>%
+                addTiles() %>%
+                addPolygons(
+                    data = drive.polys(),
+                    layerId = ~CODE16,
+                    fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
+                    weight = 1,
+                    opacity = 1,
+                    color = "white",
+                    dashArray = "3",
+                    fillOpacity = 0.7,
+                    highlight = highlightOptions(
+                        weight = 3,
+                        color = "#666",
+                        dashArray = "",
+                        fillOpacity = 0.7,
+                        bringToFront = TRUE),
+                    label = labels.drive(),
+                    labelOptions = labelOptions(
+                        style = list("font-weight" = "normal", padding = "3px 8px"),
+                        textsize = "15px",
+                        direction = "auto")) %>%
+                addMarkers(
+                    data = htt.details %>% filter(Hospital_ID %in% achd_ids),
+                    lng = ~Longitude,
+                    lat = ~Latitude,
+                    label = ~Hospital.name) %>%
+                addMarkers(
+                    data = htt.details %>% filter(Hospital_ID %in% isolate(drive.values$add_clinic_table[['ID']])),
+                    lng = ~Longitude,
+                    lat = ~Latitude,
+                    label = ~Hospital.name
+                ) %>%
+                addLegend(pal = pal.drive(), 
+                          values = as.numeric(drive.polys()$shortest_time, 'hours'), 
+                          opacity = 0.7, 
+                          title = "Driving time to clinics",
+                          position = "bottomright")
+            
+        })
 
+
+
+
+
+```
 
 
 

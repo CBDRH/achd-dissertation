@@ -55,11 +55,11 @@ sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
 sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
 sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
 
-################################## HEADER CONTENT #######################################
+############################# HEADER CONTENT #######################################
 
 header <- dashboardHeader(title = "ACHD in NSW")
 
-################################## SIDEBAR CONTENT #######################################
+############################# SIDEBAR CONTENT #######################################
 
 sidebar <- dashboardSidebar(
     sidebarMenu(
@@ -106,7 +106,7 @@ sidebar <- dashboardSidebar(
     )
 )
 
-################################## Body CONTENT #######################################
+############################# BODY CONTENT #######################################
 
 
 body <- dashboardBody(
@@ -219,8 +219,8 @@ body <- dashboardBody(
                         uiOutput('new.clinics.output'),
                         width = 4, height = 340),
                 ),
-                fluidRow(uiOutput('driving.map.box')
-                    
+                fluidRow(box(leafletOutput('drive.map', height = 550),
+                             width = 9, height = 580)
                 )
         )
     )
@@ -747,10 +747,38 @@ server <- function(input, output) {
         }
     })
     
-    #-------------Reactive Values for Driving Map
+    # Markers for hospital locations
+    # Current ACHD clinics and new clinics will appear different colours
+    HospitalIcons <- awesomeIconList(
+        Current = makeAwesomeIcon(
+            icon = 'hospital-o', 
+            markerColor = 'green', 
+            iconColor = 'white', 
+            library = "fa"), 
+        New = makeAwesomeIcon(
+            icon = 'hospital-o', 
+            markerColor = 'orange', 
+            iconColor = 'white', 
+            library = "fa") )
+    
+    #------------------Base Map----------------#
+    # output the basic version of the map with elements that don't change
+    output$drive.map <- renderLeaflet({ 
+        leaflet() %>%
+            addTiles() %>%
+            addAwesomeMarkers(
+                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
+                lng = ~Longitude,
+                lat = ~Latitude,
+                label = ~Hospital.name,
+                icon = ~HospitalIcons["Current"])  
+        })
+    
+    
+    #-------------Reactive Values for Driving Map--------------------#
     drive.values <- reactiveValues()
     #For creating and editing the clinics table
-    drive.values$clinic_table <- data.frame(Hospital = as.character(), 
+    drive.values$add_clinic_table <- data.frame(Hospital = as.character(), 
                                             ID = as.character(), 
                                             stringsAsFactors = FALSE)
     #For tracking the ACHD clinic IDs selected
@@ -768,12 +796,12 @@ server <- function(input, output) {
         new.row <- isolate(data.frame(Hospital = input$hospital, ID = hospital_id, stringsAsFactors = FALSE))
         
         # Add the new row to the clinic table, if it wasnt already selected
-        if ( !(hospital_id %in% isolate(drive.values$clinic_table$ID)) )
-        { isolate(drive.values$clinic_table <- rbind(drive.values$clinic_table, new.row)) }
+        if ( !(hospital_id %in% isolate(drive.values$add_clinic_table$ID)) )
+        { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
         
         # Display the table
         output$new.clinics.output <- renderUI({
-            output$new.clinics.table <- renderTable(drive.values$clinic_table)
+            output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
             tableOutput("new.clinics.table")
         })
         
@@ -800,11 +828,11 @@ server <- function(input, output) {
     observeEvent(input$drive.clinic.reset, {
 
         # Clear the clinics table
-        drive.values$clinic_table <- NULL
+        drive.values$add_clinic_table <- NULL
         
         # Display the table as nothing
         output$new.clinics.output <- renderUI({
-            output$new.clinics.table <- renderTable(drive.values$clinic_table)
+            output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
             tableOutput("new.clinics.table")
         })
         
@@ -814,6 +842,8 @@ server <- function(input, output) {
         # Reset the area data
         drive.values$area_data <- drive.area.achd()
     })
+    
+    ############# Reactive Functions for Mapping ###############
     
     # -------------- sa2 polys for driving map ----------------------------------- #
     drive.polys <- eventReactive(input$drive.update, {
@@ -825,69 +855,96 @@ server <- function(input, output) {
         polys.filtered
     })
     
-    #Set bins for locations map
-    bins.drive <- reactive({
+    # Set bins for locations map
+    bins.drive <- eventReactive(input$drive.update, {
         bins <- seq(0, 
                     plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling), 
                     plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling)/10)
         bins
     })
     
-    #set colour palette for driving map
-    pal.drive <- reactive({
-        pal <- colorBin("YlOrRd", domain = as.numeric(drive.polys()$shortest_time, 'hours'), bins = bins.drive())
+    # Set colour palette for driving map
+    pal.drive <- eventReactive(input$drive.update, {
+        pal <- colorNumeric("YlOrRd", domain = as.numeric(drive.polys()$shortest_time, 'hours'))
         pal
     })
     
-    #Set labels for driving map
-    labels.drive <- reactive({
+    # Set labels for driving map
+    labels.drive <- eventReactive(input$drive.update, {
         sprintf(
             "<strong>%s</strong><br/>%g hours by car",
             drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
     })
     
-    # The box containing the driving times map
-    observeEvent(input$drive.update, {
-        output$driving.map.box <- renderUI({
-            box(leafletOutput('drive.map', height = 550),
-                width = 9, height = 580)
-        })
+    ############# Observers for Map editting ###############
     
-    
-        # Creating the driving times map
-        output$drive.map <- renderLeaflet({
-            leaflet() %>%
-                addTiles() %>%
-                addPolygons(
-                    data = drive.polys(),
-                    layerId = ~CODE16,
-                    fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
-                    weight = 1,
-                    opacity = 1,
-                    color = "white",
-                    dashArray = "3",
+    # Adding polygons
+    observe ({
+        leafletProxy("drive.map") %>% 
+            # Clear old polygons
+            clearShapes %>%
+            # Add new polygons
+            addPolygons(
+                data = drive.polys(),
+                layerId = ~CODE16,
+                fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
+                weight = 1,
+                opacity = 1,
+                color = "white",
+                dashArray = "3",
+                fillOpacity = 0.7,
+                highlight = highlightOptions(
+                    weight = 3,
+                    color = "#666",
+                    dashArray = "",
                     fillOpacity = 0.7,
-                    highlight = highlightOptions(
-                        weight = 3,
-                        color = "#666",
-                        dashArray = "",
-                        fillOpacity = 0.7,
-                        bringToFront = TRUE),
-                    label = labels.drive(),
-                    labelOptions = labelOptions(
-                        style = list("font-weight" = "normal", padding = "3px 8px"),
-                        textsize = "15px",
-                        direction = "auto")) %>%
-                addLegend(pal = pal.drive(), 
-                          values = as.numeric(drive.polys()$shortest_time, 'hours'), 
-                          opacity = 0.7, 
-                          title = "Driving time to clinics",
-                          position = "bottomright")
-            
-        })
-    
+                    bringToFront = TRUE),
+                label = labels.drive(),
+                labelOptions = labelOptions(
+                    style = list("font-weight" = "normal", padding = "3px 8px"),
+                    textsize = "15px",
+                    direction = "auto"))
     })
     
+    # Adding a Legend
+    observe({
+        leafletProxy("drive.map") %>%
+            # Clear old legend 
+            clearControls() %>%
+            # Add Legend
+            addLegend(pal = pal.drive(), 
+                      values = as.numeric(drive.polys()$shortest_time, 'hours'), 
+                      opacity = 0.7, 
+                      title = "Driving time to clinics",
+                      position = "bottomright",
+                      layerId = 'drive.legend')
+    })
+    
+    # Adding Markers for New clinics
+    observeEvent(input$drive.update, {
+        if ( length(drive.values$add_clinic_table$ID != 0)) {
+            leafletProxy("drive.map") %>%
+                # Clear old markers 
+                clearGroup(group = "new_markers") %>%
+                # Add markers for new clinics
+                addAwesomeMarkers(
+                    data = htt.details %>% filter(Hospital_ID %in% drive.values$add_clinic_table$ID),
+                    lng = ~Longitude,
+                    lat = ~Latitude,
+                    label = ~Hospital.name,
+                    group = "new_markers",
+                    icon = ~HospitalIcons["New"]
+                    
+                )
+        } else {
+            leafletProxy("drive.map") %>%
+                # Clear old markers 
+                clearGroup(group = "new_markers")
+        }
+        
+    })
+    
+#This is the closing braket for the server        
 }
 
 
