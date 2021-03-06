@@ -35,7 +35,7 @@ app_data <- '../ACHD_Dashboard/data/'
 ################################## LOAD DATA ############################################
 
 #import ACHD data
-achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
 
 #import DX coding
 dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
@@ -97,6 +97,52 @@ prepare.area.data <- function(achd_data) {
 ``` {r}
 area.achd <- prepare.area.data(achd)
 ```
+
+``` {r}
+combined.poly <- st_combine(sa2.polys)
+
+```
+
+
+``` {r}
+
+coords <- coordinates(sa2.polys) %>%
+            as.data.frame()  %>%
+            rename("long" = "V1",
+                   "lat" = "V2")
+
+```
+
+``` {r}
+max(sa2.polys@polygons[[1]]@Polygons[[1]]@coords[,1])
+
+
+
+```
+
+``` {r}
+coords <- do.call(rbind,lapply(sa2.polys@polygons, function(x) 
+        {data.frame(long = c(min(x@Polygons[[1]]@coords[,1]),
+                            max(x@Polygons[[1]]@coords[,1])),
+                    lat = c(min(x@Polygons[[1]]@coords[,2]),
+                            max(x@Polygons[[1]]@coords[,2]))
+                    )
+        })
+)
+
+
+
+```
+
+``` {r}
+
+min(coords$long)
+min(coords$lat)
+max(coords$long)
+max(coords$lat)
+
+```
+
 
 ``` {r}
 achd_ids <- c(646, 755, 152, 683, 737, 979, 408)
@@ -261,9 +307,22 @@ seq(0,
 
 
 
+sprintf(
+            "<strong>%s</strong><br/>%g hours by car",
+            drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
 
 
-
-
+str_ptno <- paste("<strong>Number of ACHD patients:</strong> ", 
+                          event_area[["ACHD_count"]], 
+                          sep = "")
+        str_drive <- paste("<strong>Driving time to nearest clinic:</strong> ", 
+                           as.period(event_area[["shortest_time"]])@hour, "hrs ",
+                           as.period(event_area[["shortest_time"]])@minute, "min", 
+                           sep = "")
+        str_bethesda <- paste("<strong>Simple | Moderate | Severe -</strong> ",
+                              event_area[["beth_1"]], " | ",
+                              event_area[["beth_2"]], " | ",
+                              event_area[["beth_3"]], " | ",
+                              sep = "")
 
 

@@ -29,7 +29,7 @@ app_data <- './data/'
 ################################## LOAD DATA ############################################
 
 #import ACHD data
-achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
 
 #import DX coding
 dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
@@ -52,8 +52,8 @@ new_achd_ids <- achd_ids
 
 #Import area polygons
 sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
-sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
-sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
+#sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
+#sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
 
 ############################# HEADER CONTENT #######################################
 
@@ -72,37 +72,14 @@ sidebar <- dashboardSidebar(
         
         # Global Filters
         h4("Global Filters"),
-        checkboxGroupInput("sb.bethesda", "Disease severity",
-                           choices = c('Simple' = 1,
-                                       'Moderate' = 2,
-                                       'Complex' = 3,
-                                       'Unknown' = 4),
-                           selected = c(1, 2, 3)),
-        checkboxGroupInput("sb.sex", "Sex",
-                           choices = c('Male' = 1,
-                                       'Female' = 2,
-                                       'Neither' = 4),
-                           selected = c(1, 2, 4)),
-        checkboxGroupInput("sb.mortality", "Deceased patients",
-                           choices = c('Alive' = 0,
-                                       'Deceased' = 1),
-                           selected = c(0)),
-        dateRangeInput("sb.dates", "Select a time period:",
-                       start = "2000-01-01", end = "2020-12-31"),
-        sliderInput('sb.age', 'Age',
-                    min = 18,
-                    max = 110,
-                    value = c(18, 110),
-                    round = TRUE),
-        sliderInput('sb.last.clinic', 'Time since last clinic visit',
-                    min = 0,
-                    max = 10,
-                    value = c(0,10),
-                    round = TRUE),
-        actionButton("sb.update", "Update"),
-        actionButton("sb.reset", "Reset")
-        
-        
+        div(style="display:inline-block",actionButton("sb.update", "Apply")),
+        div(style="display:inline-block",actionButton("sb.reset", "Reset")),
+        uiOutput("out.bethesda"),
+        uiOutput("out.sex"),
+        uiOutput("out.mortality"),
+        uiOutput("out.age"),
+        uiOutput("out.dates"),
+        uiOutput("out.last.clinic")
     )
 )
 
@@ -205,6 +182,10 @@ body <- dashboardBody(
                                                        'Rest of NSW' = "Rest of NSW",
                                                        'ACT' = "Australian Capital Territory"),
                                            selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
+                        selectInput("select.overlay", "Select area overlay:",
+                                    choices = c("Driving Time to Nearest Clinic" = "drive.overlay",
+                                                "Total ACHD population" = "achd.overlay"),
+                                    selected = c("Driving Time to Nearest Clinic" = "drive.overlay")),
                         actionButton("drive.update", "Update"),
                         width = 4, height = 340
                     ),
@@ -220,7 +201,14 @@ body <- dashboardBody(
                         width = 4, height = 340),
                 ),
                 fluidRow(box(leafletOutput('drive.map', height = 550),
-                             width = 9, height = 580)
+                             width = 9, height = 580),
+                         column(width = 3,
+                             fluidRow(valueBox("Output 1", 'Title 1', width = 12)),
+                             fluidRow(valueBox("Output 2", 'Title 2', width = 12)),
+                             fluidRow(valueBox("Output 3", 'Title 3', width = 12)),
+                             fluidRow(valueBox("Output 4", 'Title 4', width = 12)),
+                             fluidRow(valueBox("Output 5", 'Title 5', width = 12)),
+                         )
                 )
         )
     )
@@ -228,6 +216,9 @@ body <- dashboardBody(
 
 # Define UI for application
 ui <- dashboardPage(header, sidebar, body)
+
+
+############################# SERVER #################################
 
 # Define server logic
 server <- function(input, output) {
@@ -247,7 +238,19 @@ server <- function(input, output) {
             filter(sex %in% input$sb.sex) %>%
             filter(bethesda_code %in% input$sb.bethesda) %>%
             filter(as.numeric(age, 'years') >= input$sb.age[1]) %>%
-            filter(as.numeric(age, 'years') <= input$sb.age[2])
+            filter(as.numeric(age, 'years') <= input$sb.age[2]) %>%
+            filter(as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>%
+            filter(as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>%
+            {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2020-12-31") )
+                mutate(., 
+                       clinics_2000 = map(clinics_2000, ~ .x %>%
+                                                 mutate(clinic_in_period = 
+                                                        sapply(.$clinic_date, function(x) x %within% (as.Date(input$sb.dates[1])
+                                                                                                      %--% 
+                                                                                                      as.Date(input$sb.dates[2]))))),
+                       in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)) %>% 
+                    filter(in_time_period == TRUE)
+                else . }
     }) 
     
     # count frequency of diagnoses
@@ -366,6 +369,108 @@ server <- function(input, output) {
     area.drive
     })
     
+
+    
+############################# SIDEBAR #################################
+    
+    output$out.bethesda <- renderUI ({
+        checkboxGroupInput("sb.bethesda", "Disease severity",
+                           choices = c('Simple' = 1,
+                                       'Moderate' = 2,
+                                       'Complex' = 3,
+                                       'Unknown' = 4),
+                           selected = c(1, 2, 3))
+    })
+    
+    output$out.sex <- renderUI ({
+        checkboxGroupInput("sb.sex", "Sex",
+                           choices = c('Male' = 1,
+                                       'Female' = 2,
+                                       'Neither' = 4),
+                           selected = c(1, 2, 4))
+    })
+      
+    output$out.mortality <- renderUI ({
+        checkboxGroupInput("sb.mortality", "Deceased patients",
+                           choices = c('Alive' = 0,
+                                       'Deceased' = 1),
+                           selected = c(0))
+    })
+    
+    output$out.age <- renderUI ({
+        sliderInput('sb.age', 'Age',
+                    min = 18,
+                    max = 110,
+                    value = c(18, 110),
+                    round = TRUE)
+    })
+    
+    output$out.dates <- renderUI ({
+        dateRangeInput("sb.dates", "Select a time period:",
+                       start = "2000-01-01", end = "2020-12-31",
+                       min = "2000-01-01", max = "2020-12-31",
+                       format = "dd/mm/yyyy")
+    })
+       
+    output$out.last.clinic <- renderUI ({ 
+        sliderInput('sb.last.clinic', 'Time since last clinic visit',
+                    min = 0,
+                    max = 21,
+                    value = c(0,21),
+                    round = TRUE)
+    })
+        
+    
+    observeEvent(input$sb.reset, {
+    
+        output$out.bethesda <- renderUI ({
+            checkboxGroupInput("sb.bethesda", "Disease severity",
+                               choices = c('Simple' = 1,
+                                           'Moderate' = 2,
+                                           'Complex' = 3,
+                                           'Unknown' = 4),
+                               selected = c(1, 2, 3))
+        })
+        
+        output$out.sex <- renderUI ({
+            checkboxGroupInput("sb.sex", "Sex",
+                               choices = c('Male' = 1,
+                                           'Female' = 2,
+                                           'Neither' = 4),
+                               selected = c(1, 2, 4))
+        })
+        
+        output$out.mortality <- renderUI ({
+            checkboxGroupInput("sb.mortality", "Deceased patients",
+                               choices = c('Alive' = 0,
+                                           'Deceased' = 1),
+                               selected = c(0))
+        })
+        
+        output$out.age <- renderUI ({
+            sliderInput('sb.age', 'Age',
+                        min = 18,
+                        max = 110,
+                        value = c(18, 110),
+                        round = TRUE)
+        })
+        
+        output$out.dates <- renderUI ({
+            dateRangeInput("sb.dates", "Select a time period:",
+                           start = "2000-01-01", end = "2020-12-31",
+                           min = "2000-01-01", max = "2020-12-31",
+                           format = "dd/mm/yyyy")
+        })
+        
+        output$out.last.clinic<- renderUI ({ 
+            sliderInput('sb.last.clinic', 'Time since last clinic visit',
+                        min = 0,
+                        max = 21,
+                        value = c(0,21),
+                        round = TRUE)
+        })
+    })
+    
 ############################# SNAPSHOTS TAB #################################
     
     #---------------Value Boxes-------------------#
@@ -453,7 +558,7 @@ server <- function(input, output) {
         })
     })
     output$nclinic_plot <- renderPlot ({
-        ggplot(achd.filtered(), aes(x=no_clinics)) +
+        ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
             geom_bar(fill = "light grey", color = "black") +
             scale_x_continuous() +
             labs(x = "Number of Clinic Visits", 
@@ -761,20 +866,6 @@ server <- function(input, output) {
             iconColor = 'white', 
             library = "fa") )
     
-    #------------------Base Map----------------#
-    # output the basic version of the map with elements that don't change
-    output$drive.map <- renderLeaflet({ 
-        leaflet() %>%
-            addTiles() %>%
-            addAwesomeMarkers(
-                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
-                lng = ~Longitude,
-                lat = ~Latitude,
-                label = ~Hospital.name,
-                icon = ~HospitalIcons["Current"])  
-        })
-    
-    
     #-------------Reactive Values for Driving Map--------------------#
     drive.values <- reactiveValues()
     #For creating and editing the clinics table
@@ -855,7 +946,20 @@ server <- function(input, output) {
         polys.filtered
     })
     
-    # Set bins for locations map
+    #set state centre coords function
+    set_coords <- reactive({
+        coords <- do.call(rbind,lapply(drive.polys()@polygons, function(x) 
+        {data.frame(long = c(min(x@Polygons[[1]]@coords[,1]),
+                             max(x@Polygons[[1]]@coords[,1])),
+                    lat = c(min(x@Polygons[[1]]@coords[,2]),
+                            max(x@Polygons[[1]]@coords[,2]))
+        )
+        })
+        )
+        coords
+    })
+    
+    # Set bins for driving map
     bins.drive <- eventReactive(input$drive.update, {
         bins <- seq(0, 
                     plyr::round_any(max(as.numeric(drive.polys()$shortest_time, 'hours'), na.rm = TRUE), 10, ceiling), 
@@ -869,17 +973,56 @@ server <- function(input, output) {
         pal
     })
     
+    #Set bins for locations map
+    bins.loc2 <- reactive({
+        bins <- seq(0, 
+                    plyr::round_any(max(drive.polys()$ACHD_count), 10, ceiling), 
+                    plyr::round_any(max(drive.polys()$ACHD_count), 10, ceiling)/10)
+        bins
+    })
+    
+    #Set colour palette for locations map
+    pal.loc2 <- reactive({
+        pal <- colorNumeric("YlOrRd", domain = drive.polys()$ACHD_count)
+        pal
+    })
+    
     # Set labels for driving map
     labels.drive <- eventReactive(input$drive.update, {
         sprintf(
-            "<strong>%s</strong><br/>%g hours by car",
-            drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
+            "<strong>%s</strong><br/>
+            %i ACHD patients<br/>
+            Simple: %i | Moderate: %i | Severe: %i<br/>
+            %.1f hr drive to nearest clinic<br/>",
+            drive.polys()$NAME16, 
+            drive.polys()$ACHD_count,
+            drive.polys()$beth_1, drive.polys()$beth_2, drive.polys()$beth_3,
+            as.numeric(drive.polys()$shortest_time, 'hours')
+            ) %>% 
+                lapply(htmltools::HTML)
+    })
+    
+    #------------------Base Map----------------#
+    # output the basic version of the map with elements that don't change
+    output$drive.map <- renderLeaflet({ 
+        leaflet() %>%
+            addTiles() %>%
+            setView(147.016667, -32.163333, zoom = 5.5) %>%
+            addAwesomeMarkers(
+                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
+                lng = ~Longitude,
+                lat = ~Latitude,
+                label = ~Hospital.name,
+                icon = ~HospitalIcons["Current"])  
     })
     
     ############# Observers for Map editting ###############
     
     # Adding polygons
-    observe ({
+    observeEvent(input$drive.update, {
+        
+        if (input$select.overlay == 'drive.overlay') {
+        
         leafletProxy("drive.map") %>% 
             # Clear old polygons
             clearShapes %>%
@@ -903,21 +1046,75 @@ server <- function(input, output) {
                 labelOptions = labelOptions(
                     style = list("font-weight" = "normal", padding = "3px 8px"),
                     textsize = "15px",
-                    direction = "auto"))
+                    direction = "auto")) %>%
+                fitBounds(min(set_coords()$long),
+                          min(set_coords()$lat),
+                          max(set_coords()$long),
+                          max(set_coords()$lat))
+            
+        } else if (input$select.overlay == 'achd.overlay') {
+            
+            leafletProxy("drive.map") %>% 
+                # Clear old polygons
+                clearShapes %>%
+                addPolygons(
+                    data = drive.polys(),
+                    layerId = ~CODE16,
+                    fillColor = ~pal.loc2()(ACHD_count),
+                    weight = 1,
+                    opacity = 1,
+                    color = "white",
+                    dashArray = "3",
+                    fillOpacity = 0.7,
+                    highlight = highlightOptions(
+                        weight = 3,
+                        color = "#666",
+                        dashArray = "",
+                        fillOpacity = 0.7,
+                        bringToFront = TRUE),
+                    label = labels.drive(),
+                    labelOptions = labelOptions(
+                        style = list("font-weight" = "normal", padding = "3px 8px"),
+                        textsize = "15px",
+                        direction = "auto")) %>%
+                fitBounds(min(set_coords()$long),
+                          min(set_coords()$lat),
+                          max(set_coords()$long),
+                          max(set_coords()$lat))
+        }
     })
     
     # Adding a Legend
-    observe({
-        leafletProxy("drive.map") %>%
-            # Clear old legend 
-            clearControls() %>%
-            # Add Legend
-            addLegend(pal = pal.drive(), 
-                      values = as.numeric(drive.polys()$shortest_time, 'hours'), 
-                      opacity = 0.7, 
-                      title = "Driving time to clinics",
-                      position = "bottomright",
-                      layerId = 'drive.legend')
+    observeEvent(input$drive.update, {
+        
+        if (input$select.overlay == 'drive.overlay') {
+            
+            data <- drive.polys()@data %>% filter(!is.na(shortest_time))
+            
+            leafletProxy("drive.map") %>%
+                # Clear old legend 
+                clearControls() %>%
+                # Add Legend
+                addLegend(pal = pal.drive(), 
+                          values = as.numeric(data$shortest_time, 'hours'), 
+                          opacity = 0.7, 
+                          title = "Driving time (hrs)",
+                          position = "bottomright",
+                          layerId = 'drive.legend')
+        
+        } else if (input$select.overlay == 'achd.overlay') {
+        
+            leafletProxy("drive.map") %>%
+                # Clear old legend 
+                clearControls() %>%
+                # Add Legend
+                addLegend(pal = pal.loc2(), 
+                          values = drive.polys()$ACHD_count, 
+                          opacity = 0.7, 
+                          title = "ACHD population",
+                          position = "bottomright")
+        }
+            
     })
     
     # Adding Markers for New clinics

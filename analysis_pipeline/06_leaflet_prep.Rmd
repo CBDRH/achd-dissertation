@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = '../..')
 
 # Path to the study's data folder (note: only accessible at RPAH)
-study_folder <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+study_folder <- '/Users/calumnicholson/Documents/OneDrive - UNSW/Dissertation/data'
 
 library(tidyverse)
 library(lubridate)
@@ -26,9 +26,9 @@ library(ggplot2)
 
 ``` {r}
 #import polygon boundaries
-sa2.polys <- readOGR('./ASGS/1270055001_sa2_2016_aust_shape/SA2_2016_AUST.shp')
-sa3.polys <- readOGR('./ASGS/1270055001_sa3_2016_aust_shape/SA3_2016_AUST.shp')
-sa4.polys <- readOGR('./ASGS/1270055001_sa4_2016_aust_shape/SA4_2016_AUST.shp')
+sa2.polys <- readOGR(paste(study_folder, '/ASGS/1270055001_sa2_2016_aust_shape/SA2_2016_AUST.shp', sep = ""))
+sa3.polys <- readOGR(paste(study_folder, '/ASGS/1270055001_sa3_2016_aust_shape/SA3_2016_AUST.shp', sep = ""))
+sa4.polys <- readOGR(paste(study_folder, '/ASGS/1270055001_sa4_2016_aust_shape/SA4_2016_AUST.shp', sep = ""))
 ``` 
 
 ``` {r}
@@ -76,11 +76,10 @@ prep.SA.data <- function (shapefile, smoothing, area_type) {
 
 ``` {r}
 # prepare the shape files
-sa2.shapes <- prep.SA.data(sa2.polys, 0.01, 'sa2')
+sa2.shapes <- prep.SA.data(sa2.polys, 0.01, 'sa2') %>% subset(!(.$NAME16 %in% "Lord Howe Island") )
 sa3.shapes <- prep.SA.data(sa3.polys, 0.01, 'sa3')
 sa4.shapes <- prep.SA.data(sa4.polys, 0.01, 'sa4')
 ```
-
 
 ``` {r}
 getwd()

@@ -19,10 +19,10 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir = '..')
 
 # Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'C:/Users/calum.nicholson/r-projects/achd-data/'
+ACHD_path <- '/Users/calumnicholson/script/r-projects/achd-data/'
 
 # Path to the study's data folder (note: accessible from UNSw oneDrive)
-study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
+study_folder <- '/Users/calumnicholson/Documents/OneDrive - UNSW/Dissertation/data'
 
 library(tidyverse)
 library(lubridate)
@@ -398,13 +398,13 @@ DX <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
 
 # Import the lookup table for EPCC codes, remove the old PA diagnoses
 ACHD_to_EPCC <- read.csv(paste(study_folder, '/dx_codes/ACHD_EPCC_coding.csv', sep = "")) %>% 
-                filter(!(ï..Variable == 'adm_AbsentPA' | ï..Variable == 'PA'))
+                filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA'))
 
 # Change the DX column names to the correct ECC codes
-names(DX) <- ACHD_to_EPCC$EPCC_Code[match(names(DX), ACHD_to_EPCC$ï..Variable)]
+names(DX) <- ACHD_to_EPCC$EPCC_Code[match(names(DX), ACHD_to_EPCC$Variable)]
 
 # Remove the 'achd_id' row from the ACHD to EPCC lookup table
-ACHD_to_EPCC <- filter(ACHD_to_EPCC, !(ï..Variable == "achd_id"))
+ACHD_to_EPCC <- filter(ACHD_to_EPCC, !(Variable == "achd_id"))
 ```
 
 All of the diagnosis variables code 1 or -1 for true and 0 or NA for untrue. To make it a little easier to read, we will recode -1 to 1 and NA to 0.
@@ -560,7 +560,9 @@ person.level <- person.level %>%
               # age at first clinic attendance
               age_first_clinic = as.period(dob %--% first_clinic),
               # age at last clinic attendance
-              age_last_clinic = as.period(dob %--% last_clinic)
+              age_last_clinic = as.period(dob %--% last_clinic),
+              # time since last clinic attendance
+              gap = as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic)
                )
 ```
 
@@ -584,7 +586,9 @@ person.level <- person.level %>%
               # age at first clinic attendance
               age_first_clinic_2000 = as.period(dob %--% first_clinic_2000),
               # age at last clinic attendance
-              age_last_clinic_2000 = as.period(dob %--% last_clinic_2000)
+              age_last_clinic_2000 = as.period(dob %--% last_clinic_2000),
+              # time since last clinic attendance
+              gap_2000 = as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic_2000)
                    )
 ```
 
@@ -1027,7 +1031,7 @@ ggplot(aes(x=ACHD_count)) +
 ```
 
 _Saving the data_
-``` {r, eval = FALSE}
+``` {r, eval = TRUE}
 #Save the Master Code Sheet
 library(xlsx)
 # request a password to protect the master code sheet
@@ -1036,17 +1040,19 @@ mcs_pass <- readline(prompt="enter a password for the mastercode sheet: ")
 master_code_sheet <- person.level.filtered %>% select(achd_id, dob, sex, suburb, postcode, state)
 # write the master code sheet to an excel spreadsheet
 write.xlsx(x = master_code_sheet,
-           file = paste(ACHD_path, 'master_code_sheet/RPAH_master_code_sheet_', Sys.Date(), '.xlsx', sep=""),
+           file = paste(ACHD_path, 'master_code_sheet/RPAH_master_code_sheet.xlsx', sep=""),
            sheetName = "master_code_sheet",
            password = mcs_pass)
 
 #Save the analysis data set
-analysis_dataset <- person.level.filtered %>% select(-dob, -suburb, -postcode, -state)
+analysis_dataset <- person.level.filtered %>% select(-dob, -suburb, -postcode, -state,
+                                                     -clinics, -no_clinics, -first_clinic, -last_clinic,
+                                                     -date_diff, -age_first_clinic, -age_last_clinic, -gap)
 #write the analysis dataset to a csv file and an R data file
-saveRDS(analysis_dataset, file = paste(ACHD_path, 'output/rpah_analysis_dataset_', Sys.Date(), '.rds', sep=""))
+saveRDS(analysis_dataset, file = paste(ACHD_path, 'output/rpah_analysis_dataset.rds', sep=""))
 #cannot save the nested 'clinics columns as csv
-analysis_dataset %>% select(-clinics,-clinics_2000) %>%
-      write.csv(paste(ACHD_path, 'output/rpah_analysis_dataset_', Sys.Date(), '.csv', sep=""))
+analysis_dataset %>% select(-clinics_2000) %>%
+      write.csv(paste(ACHD_path, 'output/rpah_analysis_dataset.csv', sep=""))
 ```
 
 

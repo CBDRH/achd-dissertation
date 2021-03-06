@@ -20,13 +20,13 @@ library(sjmisc)
 
 ``` {r message=FALSE, warning=FALSE, include=FALSE}
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'C:/Users/calum.nicholson/r-projects/achd-data/'
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- '../ACHD_Dashboard/data/'
 
 #import ACHD data
-achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset_2021-02-05.rds', sep=""))
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
 
 #import DX coding
 dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
@@ -39,11 +39,74 @@ sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep=
                          IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
 ```
 
-> y <- achd.test %>% select(sa2, dx_codes$EPCC) %>%
-+                    mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
-+                    mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
-+                    group_by(sa2) %>%
-+                    summarise_all(sum, na.rm = TRUE)
+
+```{r}
+filter.data <- function(data,
+                          sb.mortality,
+                          sb.sex,
+                          sb.bethesda,
+                          sb.age,
+                          sb.dates,
+                          sb.last.clinic) 
+       {
+        data %>% 
+            filter(death %in% sb.mortality) %>%
+            filter(sex %in% sb.sex) %>%
+            filter(bethesda_code %in% sb.bethesda) %>%
+            filter(as.numeric(age, 'years') >= sb.age[1]) %>%
+            filter(as.numeric(age, 'years') <= sb.age[2]) %>%
+            filter(as.numeric(gap_2000, 'years') >= sb.last.clinic[1]) %>%
+            filter(as.numeric(gap_2000, 'years') <= sb.last.clinic[2]) %>%
+    
+            {if( !(sb.dates[1] == "2000-01-01" & sb.dates[2] == "2020-12-31") )
+              
+              mutate(., clinics_2000 = map(clinics_2000, ~ .x %>%
+                                        mutate(
+                                          clinic_in_period = 
+                                            sapply(.$clinic_date, 
+                                                   function(x) x %within% (as.Date(sb.dates[1])
+                                                                          %--% 
+                                                                          as.Date(sb.dates[2]))))),
+                   in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)
+                   ) %>%
+              filter(in_time_period == TRUE)
+              
+              else . }
+       }
+```
+
+``` {r}
+sb.mortality <- c(0)
+sb.sex <- c(1,2,4)
+sb.bethesda <- c(1,2,3)
+sb.age <- c(18,110)
+sb.dates <- c("2000-01-01", "2020-12-31")
+sb.last.clinic <- c(10, 21)
+
+achd.filtered <- filter.data(achd,
+                             sb.mortality,
+                             sb.sex,
+                             sb.bethesda,
+                             sb.age,
+                             sb.dates,
+                             sb.last.clinic)
+                
+```
+
+``` {r}
+print("Mortality")
+unique(achd.filtered$death)
+
+print("Sex")
+unique(achd.filtered$sex)
+
+print("Bethesda")
+unique(achd.filtered$bethesda_code)
+
+print("Age")
+range(as.numeric(achd.filtered$age, "years"))
+
+```
 
 ``` {r}
 input <- 2
