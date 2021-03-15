@@ -62,6 +62,22 @@ sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
 ```
 
 ``` {r}
+test <- achd %>% mutate(
+              # not seen for more than 3 years
+              ltf_3 = ifelse(as.numeric(gap_2000, 'years') > 3, 1, 0),
+              # not seen for more than 4 years
+              ltf_4 = ifelse(as.numeric(gap_2000, 'years') > 4, 1, 0),
+              # not seen for more than 5 years
+              ltf_5 = ifelse(as.numeric(gap_2000, 'years') > 5, 1, 0),
+)
+
+
+
+```
+
+
+
+``` {r}
 
 prepare.area.data <- function(achd_data) {
     # Diagnosis severity counts in each area
@@ -71,7 +87,11 @@ prepare.area.data <- function(achd_data) {
                          beth_1 = sum(bethesda_code == 1),
                          beth_2 = sum(bethesda_code == 2), 
                          beth_3 = sum(bethesda_code == 3), 
-                         beth_4 = sum(bethesda_code == 4))
+                         beth_4 = sum(bethesda_code == 4),
+                         ltf_3 = sum(ltf_3),
+                         ltf_4 = sum(ltf_4),
+                         ltf_5 = sum(ltf_5))
+        
     
     # Diagnoses present in each area 
     dx.drive <- achd_data %>%
@@ -84,7 +104,8 @@ prepare.area.data <- function(achd_data) {
     area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
         left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
         mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
-        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
     
     area.drive
     }

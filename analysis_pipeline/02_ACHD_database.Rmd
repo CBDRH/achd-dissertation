@@ -588,7 +588,13 @@ person.level <- person.level %>%
               # age at last clinic attendance
               age_last_clinic_2000 = as.period(dob %--% last_clinic_2000),
               # time since last clinic attendance
-              gap_2000 = as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic_2000)
+              gap_2000 = as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic_2000),
+              # not seen for more than 3 years
+              ltf_3 = ifelse(as.numeric(gap_2000, 'years') > 3, 1, 0),
+              # not seen for more than 4 years
+              ltf_4 = ifelse(as.numeric(gap_2000, 'years') > 4, 1, 0),
+              # not seen for more than 5 years
+              ltf_5 = ifelse(as.numeric(gap_2000, 'years') > 5, 1, 0),
                    )
 ```
 

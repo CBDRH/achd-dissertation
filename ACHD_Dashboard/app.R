@@ -63,12 +63,13 @@ header <- dashboardHeader(title = "ACHD in NSW")
 
 sidebar <- dashboardSidebar(
     sidebarMenu(
+      # Driving tab
+        menuItem("Driving Time to Clinics", tabName = "driving", icon = icon("th")),
         # Snapshot tab
         menuItem("Snapshot of ACHD", tabName = "snapshot", icon = icon("dashboard")),
         # Location tab
         menuItem("Location of Patients", tabName = "locations", icon = icon("th")),
-        # Driving tab
-        menuItem("Driving Time to Clinics", tabName = "driving", icon = icon("th")),
+        
         
         # Global Filters
         h4("Global Filters"),
@@ -164,7 +165,7 @@ body <- dashboardBody(
                 #Title bar
                 fluidRow(
                     valueBox("Driving time to ACHD Clinics",
-                             "Where are the ACHD clinics in NSw and how long do patients have to drive to reach the neareset clinic?",
+                             "Where are the ACHD clinics in NSW and how long do patients have to drive to reach the neareset clinic?",
                              width = 12,
                              color = 'olive')
                 ),
@@ -203,11 +204,12 @@ body <- dashboardBody(
                 fluidRow(box(leafletOutput('drive.map', height = 550),
                              width = 9, height = 580),
                          column(width = 3,
-                             fluidRow(valueBox("Output 1", 'Title 1', width = 12)),
-                             fluidRow(valueBox("Output 2", 'Title 2', width = 12)),
-                             fluidRow(valueBox("Output 3", 'Title 3', width = 12)),
-                             fluidRow(valueBox("Output 4", 'Title 4', width = 12)),
-                             fluidRow(valueBox("Output 5", 'Title 5', width = 12)),
+                             fluidRow(valueBoxOutput('dr.area.name', width = 12)),
+                             fluidRow(valueBoxOutput('pt.count.area', width = 12)),
+                             fluidRow(valueBoxOutput('pt.beth.area', width = 12)),
+                             fluidRow(valueBoxOutput('pt.lft.area', width = 12)),
+                             fluidRow(valueBoxOutput('pt.irsd.area', width = 12)),
+                             fluidRow(valueBoxOutput('pt.remote.area', width = 12)),
                          )
                 )
         )
@@ -351,7 +353,10 @@ server <- function(input, output) {
                          beth_1 = sum(bethesda_code == 1),
                          beth_2 = sum(bethesda_code == 2), 
                          beth_3 = sum(bethesda_code == 3), 
-                         beth_4 = sum(bethesda_code == 4))
+                         beth_4 = sum(bethesda_code == 4),
+                         ltf_3 = sum(ltf_3),
+                         ltf_4 = sum(ltf_4),
+                         ltf_5 = sum(ltf_5))
     
     # Diagnoses present in each area 
     dx.drive <- achd.filtered() %>%
@@ -364,7 +369,8 @@ server <- function(input, output) {
     area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
         left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
         mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
-        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
     
     area.drive
     })
@@ -1139,6 +1145,66 @@ server <- function(input, output) {
                 clearGroup(group = "new_markers")
         }
         
+    })
+    
+    # Print out area level information in summary box when the relevant area is clicked
+    observeEvent( input$drive.map_shape_click, { 
+      #---------------DATA SETUP-----------------#
+      # the area click event
+      event <- input$drive.map_shape_click
+      # select the correct area
+      drive.values$event_area <- drive.values$area_data %>% filter(SA2_5DIGIT == event$id)
+      
+      #---------------AREA VALUE BOXES-----------#
+      output$dr.area.name <- renderValueBox({
+        valueBox(tags$p(drive.values$event_area$sa2_area, style = "font-size: 50%;"),
+                 '', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      output$pt.count.area <- renderValueBox({
+        valueBox(drive.values$event_area$ACHD_count,
+                 'ACHD patients', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      output$pt.beth.area <- renderValueBox({
+        valueBox(paste(drive.values$event_area$beth_1, " | ",
+                       drive.values$event_area$beth_2, " | ",
+                       drive.values$event_area$beth_3, 
+                       sep = "  "),
+                 'Simple | Moderate | Severe', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      output$pt.lft.area <- renderValueBox({
+        valueBox(drive.values$event_area$ltf_3,
+                 'Lost to Follow Up', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      output$pt.irsd.area <- renderValueBox({
+        valueBox(drive.values$event_area$IRSD,
+                 'Level of Disadvantage', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      output$pt.remote.area <- renderValueBox({
+        valueBox(tags$p(
+                    paste(percent(drive.values$event_area$major_cities),
+                       " | ",
+                       percent(drive.values$event_area$inner_regional + drive.values$event_area$outer_regional), 
+                       " | ",
+                       percent(drive.values$event_area$remote + drive.values$event_area$very_remote), 
+                       sep = "  "),
+                    style = "font-size: 75%;"),
+                 'Cities | Regional | Remote', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      
+      
+      
     })
     
 #This is the closing braket for the server        
