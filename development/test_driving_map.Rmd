@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
+library(scales)
 library(lubridate)
 library(ggplot2)
 library(rgdal)
@@ -166,7 +167,7 @@ max(coords$lat)
 
 
 ``` {r}
-achd_ids <- c(646, 755, 152, 683, 737, 979, 408)
+achd_ids <- c(152, 408, 646, 683, 737, 979)
 
 new_achd_ids <- achd_ids
 ```
@@ -211,10 +212,54 @@ area.achd.new <- area.achd %>%
 ```
 
 ``` {r}
-test <- cbind(area.achd$shortest_time, area.achd.new$shortest_time) %>%
-          as.data.frame() %>%
-          mutate(diff = V1 - V2)
+hospital_id <- 331
+
+
+selected_hospital <- htt.nsw %>%
+        select(SA2_5DIGIT, as.character(hospital_id)) %>%
+        mutate(hospital = as.duration(.[[as.character(hospital_id)]])) %>%
+        left_join(area.achd, by ='SA2_5DIGIT') %>%
+        select(hospital, sa2_area, SA2_5DIGIT, ACHD_count, ltf_3, beth_1, beth_2, beth_3)
+
+
 ```
+
+
+``` {r}
+current_hospitals <- htt.nsw %>%
+        select(SA2_5DIGIT, as.character(achd_ids)) %>%
+        mutate_at(as.character(achd_ids), as.duration) %>%
+        left_join(area.achd, by ='SA2_5DIGIT') %>%
+        select(as.character(achd_ids), sa2_area, SA2_5DIGIT, ACHD_count, ltf_3, beth_1, beth_2, beth_3)
+```
+
+``` {r}
+current_hospitals_table <- data.frame(Hospital = htt.details %>% filter(Hospital_ID %in% achd_ids) %>% 
+                                                                 pull(Hospital.name),
+                                      ID = htt.details %>% filter(Hospital_ID %in% achd_ids) %>% 
+                                                                 pull(Hospital_ID),
+                                      Patients = sapply(achd_ids, function(x)
+                                                                  current_hospitals %>% 
+                                                                  filter(as.numeric(!!as.symbol(x), "hours") <= 1) %>%
+                                                                  summarise(hr_drive = sum(ACHD_count)) %>%
+                                                                  pull(hr_drive)
+                                                   ),
+                                      ltf = sapply(achd_ids, function(x)
+                                                                  current_hospitals %>% 
+                                                                  filter(as.numeric(!!as.symbol(x), "hours") <= 1) %>%
+                                                                  summarise(hr_drive = sum(ltf_3)) %>%
+                                                                  pull(hr_drive)
+                                                   ),
+                                      stringsAsFactors = FALSE)
+
+```
+
+``` {r}
+current_hospitals %>% filter(as.numeric(!!as.symbol(737), "hours") <= 1) %>%
+                                                         summarise(hr_drive = sum(ltf_3)) %>%
+                                                         pull(hr_drive)
+```
+
 
 ``` {r}
 new_achd_ids <- reset.ids(achd_ids, new_achd_ids)
@@ -326,24 +371,30 @@ seq(0,
 ```
 
 
+# Set up parameters to pass to Rmd document
+        params <- list(beth = input$sb.bethesda,
+                       sex = input$sb.sex,
+                       mort = input$sb.mortality,
+                       age = input$sb.age,
+                       date = input$sb.dates,
+                       clinic = input$sb.last.clinic)
+        
+        print("This is the report")
+print(params$beth)
+print(params$sex)
+print(params$mort)
+print(params$age)
+print(params$date)
+print(params$clinic)
 
 
-sprintf(
-            "<strong>%s</strong><br/>%g hours by car",
-            drive.polys()$NAME16, as.numeric(drive.polys()$shortest_time, 'hours')) %>% lapply(htmltools::HTML)
 
-
-str_ptno <- paste("<strong>Number of ACHD patients:</strong> ", 
-                          event_area[["ACHD_count"]], 
-                          sep = "")
-        str_drive <- paste("<strong>Driving time to nearest clinic:</strong> ", 
-                           as.period(event_area[["shortest_time"]])@hour, "hrs ",
-                           as.period(event_area[["shortest_time"]])@minute, "min", 
-                           sep = "")
-        str_bethesda <- paste("<strong>Simple | Moderate | Severe -</strong> ",
-                              event_area[["beth_1"]], " | ",
-                              event_area[["beth_2"]], " | ",
-                              event_area[["beth_3"]], " | ",
-                              sep = "")
+params:
+  beth: NA
+  sex: NA
+  mort: NA
+  age: NA
+  date: NA
+  clinic: NA
 
 

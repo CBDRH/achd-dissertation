@@ -1,0 +1,60 @@
+---
+title: "ACHD Report test"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(ggplot2)
+library(rgdal)
+library(sp)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+library(tableHTML)
+```
+
+This report was generated on `r Sys.Date()` from the Adult Congenital Heart Disease Clinic Planning Tool
+
+## Patient Data
+
+``` {r}
+beth <- list('1' ="Simple",
+             '2' ="Moderate",
+             '3' ="Severe",
+             '4' = "unknown")
+
+beth.selected <- beth %in% c('1','2','3')
+
+beth.selected
+
+beth[c('1','2','3')]
+```
+
+The Patient Dataset had the following filters applied:  
+  
+* __Selected Genders:__ Male, Female, Neither  
+* __CHD Disease Severity:__ `r beth[c('1','2','3')]`
+* __Age Range:__ 18 yrs to 100 yrs  
+* __Time Period:__ 01/01/2000 to 31/12/2020  
+* __Years Since Last Clinic Visit:__ 0 yrs to 21 yrs  
+* __Mortality Status:__ Alive  
+  
+
+After Filtering, these are some basic demographics of the patient data:  
+
+* __Number of Patients:__ 1000  
+* __Number with Simple CHD:__  1000  
+* __Number with Moderate CHD:__ 1000
+* __Number with Complex CHD:__ 1000
+* __Number of Patients Lost to Follow up:__ 1000  
+* __Number of Patients with a 1 hour drive to a clinic:__ 1000  
+
+
+
+

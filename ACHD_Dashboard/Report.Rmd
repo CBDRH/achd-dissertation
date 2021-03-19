@@ -1,0 +1,158 @@
+---
+title: "ACHD Report"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(ggplot2)
+library(ggpubr)
+library(rgdal)
+library(sp)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+library(tableHTML)
+```
+
+``` {r, include = FALSE, echo = FALSE}
+# the filtered achd data
+achd.data <- achd.filtered()
+
+# area level achd data (note, before are changes are made by new clinic additions)
+achd.area <- drive.area.achd()
+
+# Diagnosis Frequency Data
+dx.data <- dx.count()
+```
+
+
+This report was generated on `r Sys.Date()` from the Adult Congenital Heart Disease Clinic Planning Tool
+
+## Patient Data
+
+``` {r, include = FALSE, echo = FALSE}
+# Some named list that can be used to pull the labels for each of the filters used on the patient data
+
+# Sex filter
+sex <- list('1' = 'Male',
+            '2' = 'Female',
+            '4' = 'Neither')
+
+# bethesda severity filter
+beth <- list('1' ="Simple",
+             '2' ="Moderate",
+             '3' ="Severe",
+             '4' = "Unknown")
+
+# Mortality Status filter
+mort <- list('0' = 'Alive',
+             '1' = 'Deceased')
+```
+
+The Patient Dataset had the following filters applied:  
+  
+* __Selected Genders:__ `r sex[input$sb.sex]`  
+* __CHD Disease Severity:__ `r  beth[input$sb.bethesda]`
+* __Age Range:__ `r input$sb.age[1]` yrs to `r input$sb.age[2]` yrs  
+* __Time Period:__ `r format(as.Date(input$sb.dates[1]), "%d/%m/%Y")` to `r format(as.Date(input$sb.dates[2]), "%d/%m/%Y")`  
+* __Years Since Last Clinic Visit:__ `r input$sb.last.clinic[1]` yrs to `r input$sb.last.clinic[2]` yrs  
+* __Mortality Status:__ `r  mort[input$sb.mortality]` 
+
+``` {r, include = FALSE, echo = FALSE }
+# Some dempographic values to display
+achd.no <- achd.data %>% nrow()
+simple.no <- achd.data %>% filter(bethesda_code == 1) %>% nrow()
+moderate.no <- achd.data %>% filter(bethesda_code == 2) %>% nrow()
+complex.no <- achd.data %>% filter(bethesda_code == 3) %>% nrow()
+lft.no <- sum(achd.data$ltf_3)
+hr.no <- achd.area %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                              summarise(hr_drive = sum(ACHD_count)) %>%
+                              pull(hr_drive)
+
+```
+
+After Filtering, these are some basic demographics of the patient data:  
+
+* __Number of Patients:__ `r achd.no`  
+* __Number with Simple CHD:__  `r simple.no` 
+* __Number with Moderate CHD:__ `r moderate.no` 
+* __Number with Complex CHD:__ `r complex.no` 
+* __Number of Patients Lost to Follow up:__ `r lft.no`   
+* __Number of Patients with a 1 hour drive to a clinic:__ `r hr.no`
+
+``` {r, include = FALSE, echo = FALSE }
+age_plot <- ggplot(achd.data, aes(x=as.numeric(age, "years"))) +
+                  geom_histogram(fill = "light grey", color = "black") +
+                  labs(y = "Number of Patients", 
+                       x = "Age (yrs)") +
+                  theme(axis.title.x=element_blank()) +
+                  theme_minimal()
+
+sex_plot <- achd.data %>% filter(!is.na(sex)) %>%
+                ggplot(aes(x=sex)) +
+                    geom_bar(fill = "light grey", color = "black") +
+                    scale_x_discrete(name = "",
+                                     labels=c("1" = "Male", "2" = "Female",
+                                              "4" =  "Neither Female or Male")) +
+                    labs(y = "Number of Patients") +
+                    theme(axis.title.x=element_blank()) +
+                    theme_minimal()
+
+ndx_plot <- ggplot(achd.data, aes(x=as.integer(no_dx)) ) +
+                    geom_bar(fill = "light grey", color = "black") +
+                    scale_x_continuous() +
+                    labs(x = "Number of Diagnoses", 
+                         y = "Number of Patients") +
+                    theme() +
+                    theme_minimal() 
+
+nclinic_plot <- ggplot(achd.data, aes(x=no_clinics_2000)) +
+                        geom_bar(fill = "light grey", color = "black") +
+                        scale_x_continuous() +
+                        labs(x = "Number of Clinic Visits", 
+                             y = "Number of Patients") +
+                        theme() +
+                        theme_minimal() 
+
+ltf_plot <- ggplot(achd.data, aes(x=as.numeric(gap_2000, "years"))) +
+                        geom_histogram(fill = "light grey", color = "black") +
+                        labs(y = "Number of Patients", 
+                             x = "Time since last clinic visit (yrs)") +
+                        theme(axis.title.x=element_blank()) +
+                        theme_minimal()
+
+dx_plot <- dx.data %>% filter(dx_count > 0) %>% 
+                          ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
+                              geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
+                              theme(axis.text.x = element_text(angle = 90)) +
+                              labs(title = "Frequecy of each diagnosis", 
+                                   y = "count",
+                                   x = "") +
+                              coord_flip() +
+                              theme_minimal()
+```
+
+``` {r, echo = FALSE, fig.width=12, fig.height=20}
+ggarrange(
+  ggarrange(age_plot, ltf_plot, labels = c("A","B"), nrow = 1),
+  ggarrange(sex_plot, ndx_plot, nclinic_plot, labels = c("C", "D", "E"), nrow = 1),
+  ggarrange(dx_plot, labels = ("F"), nrow = 1), 
+  nrow = 3, heights = c(1,1,6)
+  )
+
+
+
+
+```
+
+
+
+
+
+

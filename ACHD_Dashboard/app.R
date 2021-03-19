@@ -10,6 +10,7 @@
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
+library(scales)
 library(lubridate)
 library(ggplot2)
 library(rgdal)
@@ -17,13 +18,12 @@ library(sp)
 library(sf)
 library(leaflet)
 library(leaflet.extras)
-
-#setwd()
+library(tableHTML)
 
 # Path to ACHD database data (note: only accessible at RPAH)
 pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
 
-# Path to the study's data folder (note: only accessible at RPAH)
+# Path to the app data
 app_data <- './data/'
 
 ################################## LOAD DATA ############################################
@@ -46,7 +46,7 @@ htt.nsw <- readRDS(file = paste(app_data, 'AP_output/htt_nsw.rds', sep=""))
 htt.details <- readRDS(file = paste(app_data, 'AP_output/htt_details.rds', sep=""))
 
 #current achd clinics
-achd_ids <- c(646, 755, 152, 683, 737, 979)
+achd_ids <- c(152, 408, 646, 683, 737, 979)
 #placeholer for adding new clinics
 new_achd_ids <- achd_ids
 
@@ -55,162 +55,180 @@ sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
 #sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
 #sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
 
+
 ############################# HEADER CONTENT #######################################
 
-header <- dashboardHeader(title = "ACHD in NSW")
+header <- dashboardHeader(title = "Clinic Planning Tool")
+
 
 ############################# SIDEBAR CONTENT #######################################
 
 sidebar <- dashboardSidebar(
     sidebarMenu(
-      # Driving tab
-        menuItem("Driving Time to Clinics", tabName = "driving", icon = icon("th")),
+        # Welcome Page
+        menuItem("Welcome", tabName = "welcome"),
+        # Driving tab
+        menuItem("Clinic Planning", tabName = "driving"),
         # Snapshot tab
         menuItem("Snapshot of ACHD", tabName = "snapshot", icon = icon("dashboard")),
-        # Location tab
-        menuItem("Location of Patients", tabName = "locations", icon = icon("th")),
         
+        # Report Download Button
+        downloadButton("report.dl", "Download", icon=icon("download")),
+        tags$head(tags$style(".dl_butt{color:blue;}")),
         
         # Global Filters
-        h4("Global Filters"),
-        div(style="display:inline-block",actionButton("sb.update", "Apply")),
-        div(style="display:inline-block",actionButton("sb.reset", "Reset")),
-        uiOutput("out.bethesda"),
-        uiOutput("out.sex"),
-        uiOutput("out.mortality"),
-        uiOutput("out.age"),
-        uiOutput("out.dates"),
-        uiOutput("out.last.clinic")
+        h4("Global Filters"), # Title
+        div(style="display:inline-block",actionButton("sb.update", "Apply")), # Apply Filters button
+        div(style="display:inline-block",actionButton("sb.reset", "Reset")), # Reset Filters button
+        uiOutput("out.bethesda"), # filter by disease severity
+        uiOutput("out.sex"), # fitler by sex
+        uiOutput("out.mortality"), # filter my mortality
+        uiOutput("out.age"), # filter by age
+        uiOutput("out.dates"), # filter by time range
+        uiOutput("out.last.clinic") # filter by time since last clinic visit
     )
 )
 
+
 ############################# BODY CONTENT #######################################
-
-
 body <- dashboardBody(
     tabItems(
-        #---------------Snapshot Tab-------------------#
-        tabItem(tabName = "snapshot",
-                     #Title bar
-                     fluidRow(
-                         valueBox("Snapshot of ACHD Patients in NSW",
-                                  "An overview of the ACHD patients in NSW; 
-                                 Their basic demographics, what diagnoses they and how many?",
-                                  width = 12,
-                                  color = 'olive')
-                     ),
-                     # Summary Values
-                     fluidRow(valueBoxOutput('pt.count.ss', width = 3),
-                              valueBoxOutput('simple.count.ss', width = 3),
-                              valueBoxOutput('moderate.count.ss', width = 3),
-                              valueBoxOutput('complex.count.ss', width = 3)
-                     ),
-                     # Plots
-                     fluidRow(uiOutput("age_box"),
-                              uiOutput("sex_box")
-                     ),
-                     fluidRow(
-                         uiOutput("ndx_box"),
-                         uiOutput("nclinic_box")
-                     ),
-                     fluidRow(
-                         uiOutput("dx_box")
-                     )
-        ),
-    
-        #---------------Locations Tab-------------------#
-        tabItem(tabName = "locations",
-                #Title bar
+        #---------------Welcome Tab-------------------#
+        tabItem(tabName = "welcome",
                 fluidRow(
-                    valueBox("Patient Locations in NSW",
-                             "Where are patients living throughout NSW 
-                                     and what kinds of CHD a present in each area?",
-                             width = 12,
-                             color = 'olive')
+                  
+                  # Title bar
+                  valueBox("Clinic Planning in Adult Congenital Heart Disease",
+                           "Combining geographic information systems, census data and patient information to determine
+                           appropraite clinic locations in NSW",
+                           width = 10,
+                           color = 'olive'),
+                  tags$head(tags$style(make_css(list('.btn', 'white-space', 'pre-wrap')))),
+                  
+                  # Button to load patient data
+                  actionButton('load.data', 
+                               HTML("Load Patient Data"),
+                               style ="display:block;
+                                       height: 102px;
+                                       width: 175px;
+                                       border: 2px solid black;
+                                       font-size: 200%;" )
                 ),
-                # Summary Values
-                fluidRow(valueBoxOutput('pt.count.loc', width = 3),
-                         valueBoxOutput('simple.count.loc', width = 3),
-                         valueBoxOutput('moderate.count.loc', width = 3),
-                         valueBoxOutput('complex.count.loc', width = 3)
+                
+                # Introduction and background information
+                fluidRow(
+                  box(title = "Introduction",
+                      
+                    
+                  ),
+                  box(title = "Data Sources"
+                      
+                  ),
                 ),
                 fluidRow(
-                        box(title = "Map Customisation",
-                        selectInput('loc.poly.select', 'Select Area Level:',
-                                    choices = c('SA2' = 2,
-                                                'SA3' = 3,
-                                                'SA4' = 4),
-                                    selected = 2),
-                        checkboxGroupInput("loc.gcc", "Filter by Region",
-                                           choices = c('Greater Sydney' = "Greater Sydney",
-                                                       'Rest of NSW' = "Rest of NSW",
-                                                       'ACT' = "Australian Capital Territory"),
-                                           selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
-                        actionButton("loc.update", "Update"),
-                        width = 3, height = 580
-                        ),
-                        uiOutput('locations.map.box'),
-                         
-                ),
-                fluidRow(uiOutput('locations.summary.box')
-                ),
-                fluidRow(uiOutput('area.dx.box')
-                ),
-                fluidRow(uiOutput('area.irsd.box'),
-                         uiOutput('area.aria.box'))
+                  box(title = "Key Definitions"
+                      
+                  ),
+                  box(title = "References"
+                    
+                    
+                  )
+                )
         ),
-    
         #---------------Driving Tab-------------------#
         tabItem(tabName = "driving",
-                #Title bar
+                # Instructions for using driving tab
+                box(title = "Instructions", collapsible = T, width = 12),
+                
+                
                 fluidRow(
-                    valueBox("Driving time to ACHD Clinics",
-                             "Where are the ACHD clinics in NSW and how long do patients have to drive to reach the neareset clinic?",
-                             width = 12,
-                             color = 'olive')
+                  
+                  # Map Customisation
+                  box(title = "Map Customisation",
+                      # Filtering by Region
+                      checkboxGroupInput("drive.gcc", "Filter by Region",
+                                         choices = c('Greater Sydney' = "Greater Sydney",
+                                                     'Rest of NSW' = "Rest of NSW",
+                                                     'ACT' = "Australian Capital Territory"),
+                                         selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
+                      
+                      # Select Map Overlay
+                      selectInput("select.overlay", "Select area overlay:",
+                                  choices = c("Driving Time to Nearest Clinic" = "drive.overlay",
+                                              "Total ACHD population" = "achd.overlay"),
+                                  selected = c("Driving Time to Nearest Clinic" = "drive.overlay")),
+                      actionButton("drive.update", "Update"),
+                      width = 4, height = 340
+                  ),
+                  
+                  # Selecting New Clinics
+                  box(title = "New Clinic Selection",
+                      uiOutput('phn.selector'), # Primary Health Network
+                      uiOutput('lhn.selector'), # Local Health Network
+                      uiOutput('hospital.selector'), # Hospital
+                      div(style="display:inline-block",uiOutput('clinic.button.add')), # Add hospital to list
+                      div(style="display:inline-block",uiOutput('clinic.button.reset')), # Reset list
+                      width = 4, height = 340
+                  ),
+                  
+                  # Information about Hospital Coverage
+                  tabBox(title = NULL,
+                         id = "clinic.tabs", 
+                         tabPanel("Current Clinics", uiOutput("current.clinic.output")), # Current hospitals
+                         tabPanel("New Clinics", uiOutput("new.clinics.output")), # Newly Selected Hospitals
+                         width = 4, height = 340),
                 ),
-
-                # Summary Values
-                fluidRow(valueBoxOutput('pt.count.drive', width = 3),
-                         valueBoxOutput('simple.count.drive', width = 3),
-                         valueBoxOutput('moderate.count.drive', width = 3),
-                         valueBoxOutput('complex.count.drive', width = 3)
+                
+                # Summary Value Boxes
+                fluidRow(valueBoxOutput('pt.count.drive', width = 3), # Total Number of Patients
+                         valueBoxOutput('beth.count.drive', width = 3), # Breakdown of disease Severity
+                         valueBoxOutput('ltf.count.drive', width = 3), # Number of Patients lost to follow up
+                         valueBoxOutput('hr.count.drive', width = 3) # Number of patients within a 1 hour drive
                 ),
-                fluidRow(
-                    box(title = "Map Customisation",
-                        checkboxGroupInput("drive.gcc", "Filter by Region",
-                                           choices = c('Greater Sydney' = "Greater Sydney",
-                                                       'Rest of NSW' = "Rest of NSW",
-                                                       'ACT' = "Australian Capital Territory"),
-                                           selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
-                        selectInput("select.overlay", "Select area overlay:",
-                                    choices = c("Driving Time to Nearest Clinic" = "drive.overlay",
-                                                "Total ACHD population" = "achd.overlay"),
-                                    selected = c("Driving Time to Nearest Clinic" = "drive.overlay")),
-                        actionButton("drive.update", "Update"),
-                        width = 4, height = 340
-                    ),
-                    box(uiOutput('phn.selector'),
-                        uiOutput('lhn.selector'),
-                        uiOutput('hospital.selector'),
-                        uiOutput('clinic.button.add'),
-                        uiOutput('clinic.button.reset'),
-                        width = 4, height = 340
-                    ),
-                    box(title = "New Clinics",
-                        uiOutput('new.clinics.output'),
-                        width = 4, height = 340),
-                ),
+                
+                # Map and Area level value boxes
                 fluidRow(box(leafletOutput('drive.map', height = 550),
                              width = 9, height = 580),
                          column(width = 3,
-                             fluidRow(valueBoxOutput('dr.area.name', width = 12)),
-                             fluidRow(valueBoxOutput('pt.count.area', width = 12)),
-                             fluidRow(valueBoxOutput('pt.beth.area', width = 12)),
-                             fluidRow(valueBoxOutput('pt.lft.area', width = 12)),
-                             fluidRow(valueBoxOutput('pt.irsd.area', width = 12)),
-                             fluidRow(valueBoxOutput('pt.remote.area', width = 12)),
+                             fluidRow(valueBoxOutput('dr.area.name', width = 12)), # Area name
+                             fluidRow(valueBoxOutput('pt.count.area', width = 12)), # Patient Count
+                             fluidRow(valueBoxOutput('pt.beth.area', width = 12)), # Breakdown of disease Severity
+                             fluidRow(valueBoxOutput('pt.lft.area', width = 12)), # Number of Patients lost to follow up
+                             fluidRow(valueBoxOutput('pt.irsd.area', width = 12)), # Area disadvantage
+                             fluidRow(valueBoxOutput('pt.remote.area', width = 12)), # Area Remoteness
                          )
+                ),
+                
+                fluidRow(uiOutput('area.dx.box') # Diagnoses Present in selected area
+                )
+        ),
+        
+        #---------------Snapshot Tab-------------------#
+        tabItem(tabName = "snapshot",
+                #Title bar
+                fluidRow(
+                  valueBox("Snapshot of ACHD Patients in NSW",
+                           "An overview of the ACHD patients in NSW; 
+                                 Their basic demographics, what diagnoses they and how many?",
+                           width = 12,
+                           color = 'olive')
+                ),
+                # Summary Values
+                fluidRow(valueBoxOutput('pt.count.ss', width = 3),
+                         valueBoxOutput('simple.count.ss', width = 3),
+                         valueBoxOutput('moderate.count.ss', width = 3),
+                         valueBoxOutput('complex.count.ss', width = 3)
+                ),
+                # Plots
+                fluidRow(uiOutput("age_box"),
+                         uiOutput("sex_box")
+                ),
+                fluidRow(
+                  uiOutput("ndx_box"),
+                  uiOutput("nclinic_box")
+                ),
+                fluidRow(
+                  uiOutput("dx_box")
                 )
         )
     )
@@ -218,6 +236,8 @@ body <- dashboardBody(
 
 # Define UI for application
 ui <- dashboardPage(header, sidebar, body)
+
+
 
 
 ############################# SERVER #################################
@@ -234,15 +254,22 @@ server <- function(input, output) {
 ############################# REACTIVE FUNCTIONS #################################
     
     # Global Filters
-    achd.filtered <- eventReactive(input$sb.update, {
-        achd %>% 
-            filter(death %in% input$sb.mortality) %>%
-            filter(sex %in% input$sb.sex) %>%
-            filter(bethesda_code %in% input$sb.bethesda) %>%
-            filter(as.numeric(age, 'years') >= input$sb.age[1]) %>%
-            filter(as.numeric(age, 'years') <= input$sb.age[2]) %>%
-            filter(as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>%
-            filter(as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>%
+    achd.filtered <- eventReactive( 
+      
+        c(input$sb.update,
+        input$load.data), ignoreInit = T, # Triggers on either load data, or update filters
+        
+        {achd %>% 
+            filter(death %in% input$sb.mortality) %>% # Filter by mortality status
+            filter(sex %in% input$sb.sex) %>% # filter by sex
+            filter(bethesda_code %in% input$sb.bethesda) %>% # Filter by Disease Severity
+            filter(as.numeric(age, 'years') >= input$sb.age[1]) %>% # Filter by Age; lower bound
+            filter(as.numeric(age, 'years') <= input$sb.age[2]) %>% # Filter by Age; upper bound
+            filter(as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>% # Filter by last clinic date; lower bound
+            filter(as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>% # filter by last clinic date; upper bound
+            
+            # Filtering by the selected date range. This is quite a slow process and will only run is the date range 
+            # is altered from the default, which is all-inclusive
             {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2020-12-31") )
                 mutate(., 
                        clinics_2000 = map(clinics_2000, ~ .x %>%
@@ -269,78 +296,6 @@ server <- function(input, output) {
             mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)])
         
         dx.df
-    })
-    
-    # ------------------------- area-level data for locations map ---------------------------- #
-    loc.area.achd <- eventReactive( input$loc.update, {
-        if (input$loc.poly.select == 2) {
-            achd.df <- achd.filtered() %>% rename("area" = sa2)
-            TB.df <- sa2.TB %>% rename("area" = sa2_area)
-        } else if (input$loc.poly.select == 3) {
-            achd.df <- achd.filtered() %>% rename("area" = sa3)
-        } else {
-            achd.df <- achd.filtered() %>% rename("area"= sa4)}
-        
-        area.achd <- achd.df %>%
-            group_by(area) %>% 
-            summarise(ACHD_count = n(), 
-                      beth_1 = sum(bethesda_code == 1),
-                      beth_2 = sum(bethesda_code == 2), 
-                      beth_3 = sum(bethesda_code == 3), 
-                      beth_4 = sum(bethesda_code == 4))
-        
-        area.dx <- achd.df %>%
-            mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
-            mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
-            group_by(area) %>% 
-            dplyr::summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
-        
-        area.data <- left_join(TB.df, area.achd, by = 'area') %>% 
-                        left_join(area.dx, by = 'area') %>%
-                        mutate_at(as.character(dx_codes[['EPCC']]), 
-                                  function(x) replace(x, is.na(x), 0)) %>%
-                        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), 
-                                  function(x) replace(x, is.na(x), 0))
-        
-        area.data
-    })
-    
-    # ---------------------- plotting functions for locations map ------------------------------------ # 
-    #set polygons for locations map
-    loc.polys <- eventReactive( input$loc.update, {
-        # select the correct shapefile
-        if (input$loc.poly.select == 2) {polys <- sa2.polys} 
-        else if (input$loc.poly.select == 3) {polys <- sa3.polys} 
-        else {polys <- sa4.polys}
-        
-        # add the achd population for each area 
-        polys <- merge(polys, loc.area.achd(), by.x = 'NAME16', by.y = 'area')
-        #convert NAs to 0
-        #polys@data <- polys@data %>% replace_na(list('ACHD_count' = 0))
-        
-        # Filter by the GCC areas selected
-        polys.filtered <- subset(polys, polys$GCC_NAME16 %in% input$loc.gcc)
-        polys.filtered
-    })
-    
-    #Set bins for locations map
-    bins.loc <- reactive({
-        bins <- seq(0, 
-                    plyr::round_any(max(loc.polys()$ACHD_count), 10, ceiling), 
-                    plyr::round_any(max(loc.polys()$ACHD_count), 10, ceiling)/10)
-        bins
-    })
-    
-    #Set colour palette for locations map
-    pal.loc <- reactive({
-        pal <- colorBin("YlOrRd", domain = loc.polys()$ACHD_count, bins = bins.loc())
-        pal
-    })
-    
-    #Set labels for locations map
-    labels.loc <- reactive({
-        sprintf("<strong>%s</strong><br/>%g ACHD patients in area",
-                 loc.polys()$NAME16, loc.polys()$ACHD_count) %>% lapply(htmltools::HTML)
     })
 
     #----------------- sa2 data for driving map --------------------------------------#
@@ -376,6 +331,8 @@ server <- function(input, output) {
     })
     
 
+    
+    
     
 ############################# SIDEBAR #################################
     
@@ -477,317 +434,164 @@ server <- function(input, output) {
         })
     })
     
-############################# SNAPSHOTS TAB #################################
-    
-    #---------------Value Boxes-------------------#
-    # Value boxes with the filtered data
-    
-    output$pt.count.ss <- renderValueBox({
-        valueBox(achd.filtered() %>% nrow(),
-                 'selected patients', 
-                 width = 3, color = 'light-blue')
-    })
-    output$simple.count.ss <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), 
-                 "Patients with Simple CHD", 
-                 color = 'light-blue')
-    })
-    output$moderate.count.ss <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), 
-                 "Patients with Moderate CHD", 
-                 color = 'light-blue')
-    })
-    output$complex.count.ss <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
-                 "Patients with Complex CHD", 
-                 color = 'light-blue')
-    })
-    
-    
-    #---------------Ploting-----------------------#
-    # Age histogram
-    observeEvent(input$sb.update, {
-        output$age_box <- renderUI({
-            box(plotOutput("age_plot"), title = "Distribution of Patient Ages")
-        })
-    })
-    output$age_plot <- renderPlot({
-        ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
-            geom_histogram(fill = "light grey", color = "black") +
-            labs(y = "Number of Patients", 
-                 x = "Age (yrs)") +
-            theme(axis.title.x=element_blank()) +
-            theme_minimal()
-    })
-    
-    
-    # Sex bar plot
-    
-    observeEvent(input$sb.update, {
-        output$sex_box <- renderUI({
-            box(plotOutput("sex_plot"), title = "Sex of Patients")
-        })
-    })
-    output$sex_plot <- renderPlot ({
-        achd.filtered() %>% filter(!is.na(sex)) %>%
-            ggplot(aes(x=sex)) +
-            geom_bar(fill = "light grey", color = "black") +
-            scale_x_discrete(name = "",
-                             labels=c("1" = "Male", "2" = "Female",
-                                      "4" =  "Neither Female or Male")) +
-            labs(y = "Number of Patients") +
-            theme(axis.title.x=element_blank()) +
-            theme_minimal()
-    })
-    
-    # Number of Diagnoses
-    observeEvent(input$sb.update, {
-        output$ndx_box <- renderUI({
-            box(plotOutput("ndx_plot"), title = "Number of CHD Diagnoses per Patient")
-        })
-    })
-    output$ndx_plot <- renderPlot ({
-        ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
-            geom_bar(fill = "light grey", color = "black") +
-            scale_x_continuous() +
-            labs(x = "Number of Diagnoses", 
-                 y = "Number of Patients") +
-            theme() +
-            theme_minimal() 
-    })
-    
-    
-    # Number of Clinic Visits
-    observeEvent(input$sb.update, {
-        output$nclinic_box <- renderUI({
-            box(plotOutput("nclinic_plot"), title = "Number of Clinic Visits per Patient")
-        })
-    })
-    output$nclinic_plot <- renderPlot ({
-        ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
-            geom_bar(fill = "light grey", color = "black") +
-            scale_x_continuous() +
-            labs(x = "Number of Clinic Visits", 
-                 y = "Number of Patients") +
-            theme() +
-            theme_minimal() 
-    })
-    
-    ### Frequency of Diagnoses
-    observeEvent(input$sb.update, {
-        output$dx_box <- renderUI({
-            box(plotOutput("dx_plot", height = 750), 
-                title = "Frequency of Each Diagnosis",
-                width = 12, height = 825)
-        })
-    })
-    output$dx_plot <- renderPlot({
-        dx.count() %>% filter(dx_count > 0) %>%
-        ggplot(aes(x = dx_label, y=dx_count)) + 
-            geom_bar(stat="identity") +
-            theme(axis.text.x = element_text(angle = 90)) +
-            labs(title = "Frequecy of each diagnosis", 
-                 y = "count",
-                 x = "") +
-            coord_flip()
-    })
-    
-############################# LOCATIONS TAB #################################
-     
-    #---------------Value Boxes-------------------#
-    # Value boxes with the key data points
-    output$pt.count.loc <- renderValueBox({
-        valueBox(achd.filtered() %>% nrow(),
-                 'selected patients', 
-                 width = 3, color = 'light-blue')
-    })
-    output$simple.count.loc <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), 
-                 "Patients with Simple CHD", 
-                 color = 'light-blue')
-    })
-    output$moderate.count.loc <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), 
-                 "Patients with Moderate CHD", 
-                 color = 'light-blue')
-    })
-    output$complex.count.loc <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
-                 "Patients with Complex CHD", 
-                 color = 'light-blue')
-    })
-    
-    #---------------Leaflet-------------------#
-    
-    #Patient Locations Maps
-    
-    # create the box for the map, when the location update button is clicked
-    observeEvent(input$loc.update, {
-        output$locations.map.box <- renderUI({
-            box(leafletOutput('locations.map', height = 550),
-                width = 9, height = 580)
-        })
-    })
-    # create the map withiin the box
-    output$locations.map <- renderLeaflet({
-        leaflet() %>%
-            addTiles() %>%
-            addPolygons(
-                data = loc.polys(),
-                layerId = ~CODE16,
-                fillColor = ~pal.loc()(ACHD_count),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = labels.loc(),
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-            addLegend(pal = pal.loc(), 
-                      values = bins.loc(), 
-                      opacity = 0.7, 
-                      title = "ACHD population",
-                      position = "bottomright")
-    })
-    
-    # Create the summary box when the location update is clicked
-    observeEvent(input$loc.update, {
-        output$locations.summary.box <- renderUI({
-            box(title = "Click an area on the map for detail information",
-                width = 5, height = 580
-            )
-        })
-    })
-    
-    # Print out area level information in summary box when the relevant area is clicked
-    observeEvent( input$locations.map_shape_click, { 
-        #---------------DATA SETUP-----------------#
-        # the area click event
-        event <- input$locations.map_shape_click
-        # select the correct area
-        event_area <- loc.area.achd() %>% filter(SA2_5DIGIT == event$id)
-        
-        #--------------CREATE BOX------------------#
-        output$locations.summary.box <- renderUI({
-            box(title = as.character(event_area[["area"]]),
-                htmlOutput("area.summary"),
-                width = 12, height = 200
-            )
-        })
-        
-        #---------------BOX CONTENT----------------#
-        output$area.summary <- renderUI({
-            str_ptno <- paste("<strong>Number of ACHD patients:</strong> ", 
-                              event_area[["ACHD_count"]], 
-                              sep = "")
-            str_drive <- paste("<strong>Driving time to nearest clinic:</strong> ", 
-                          as.period(event_area[["shortest_time"]])@hour, "hrs ",
-                          as.period(event_area[["shortest_time"]])@minute, "min", 
-                          sep = "")
-            str_bethesda <- paste("<strong>Simple | Moderate | Severe -</strong> ",
-                                  event_area[["beth_1"]], " | ",
-                                  event_area[["beth_2"]], " | ",
-                                  event_area[["beth_3"]], " | ",
-                                  sep = "")
-            HTML(paste(str_ptno, str_drive, str_bethesda, sep = '<br/>'))
-            
-            })
-        
-        output$area.dx.box <- renderUI({
-            box(title = "CHD Diagnoses in ",
-                plotOutput("dx_area_plot"),
-                width = 12, height = 580
-                )
-            })
-            
-            output$dx_area_plot <- renderPlot({
-                    event_area %>% select(dx_codes$EPCC) %>% 
-                                   t() %>% as.data.frame() %>%
-                                   rename("dx_count" = V1) %>% 
-                                   mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)]) %>%
-                                   filter(dx_count > 0) %>%
-                    ggplot(aes(x = dx_label, y=dx_count)) + 
-                    geom_bar(stat="identity") +
-                    theme(axis.text.x = element_text(angle = 90)) +
-                    labs(title = "Frequecy of each diagnosis", 
-                         y = "count",
-                         x = "") +
-                    coord_flip()
-            })
-        output$area.irsd.box <- renderUI({
-            box(title = "Disadvantage",
-                plotOutput("irsd_area_plot"),
-                width = 6, height = 580)
-            })
-        output$irsd_area_plot <- renderPlot({
-            irsd.data <- loc.area.achd() %>% select(area, SA2_5DIGIT, IRSD) 
-            
-            irsd.data$cuts <- cut(as.numeric(irsd.data$IRSD), breaks = 30, label = F)
-            coloured_cut <- irsd.data$cuts[irsd.data$SA2_5DIGIT == event$id]
-            irsd.data$color <- ifelse(irsd.data$cuts == coloured_cut[1], "Selected", "")
-            
-            irsd.data %>% filter(!is.na(IRSD)) %>%
-                ggplot(aes(x=IRSD, fill = cuts == coloured_cut[1])) +
-                geom_bar() +
-                scale_fill_manual(values = c("grey45", "red"))+
-                theme_minimal() + theme(legend.position = "none")
-            })
-        
-        output$area.aria.box <- renderUI ({
-            box(title = "Remoteness",
-                plotOutput('aria_area_plot'),
-                width = 6, height = 580)
-            })
-        output$aria_area_plot <- renderPlot ({
-            aria.long <- event_area %>% 
-                select(area, SA2_5DIGIT, major_cities:very_remote) %>%
-                pivot_longer(cols = major_cities:very_remote, names_to = "remoteness")
-            
-            aria.long$remoteness <- factor(aria.long$remoteness, levels = aria.long$remoteness)
-            
-            ggplot(data = aria.long, aes(x = factor(remoteness), y = value)) +
-                geom_col() +
-                scale_y_continuous(limits = c(0,1), labels = percent) +
-                theme_minimal()
-            
-        })
-        
-        
-    })
-    
+
 ############################# DRIVING TAB #################################
+ 
+    #-------------Reactive Values for Driving Map--------------------#
+    drive.values <- reactiveValues()
+    #For creating and editing the clinics table
+    drive.values$add_clinic_table <- data.frame(Hospital = as.character(), 
+                                                Patients = as.character(),
+                                                ltf = as.character(),
+                                                stringsAsFactors = FALSE)
+    #For tracking the ACHD clinic IDs selected
+    drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+    #For the area level data
+    observe({ drive.values$area_data <- drive.area.achd() })
+    
+    #Create driving data table for the current clinics
+    observe({
+    current_hospitals <- htt.nsw %>%
+                          select(SA2_5DIGIT, as.character(achd_ids)) %>%
+                          mutate_at(as.character(achd_ids), as.duration) %>%
+                          left_join(drive.area.achd(), by ='SA2_5DIGIT') %>%
+                          select(as.character(achd_ids), sa2_area, SA2_5DIGIT, ACHD_count, 
+                                 ltf_3, beth_1, beth_2, beth_3)
+    })
+    
+    # Make a table summarise the current clinics
+    drive.values$current_clinic_table <- data.frame(Hospital = htt.details %>% filter(Hospital_ID %in% achd_ids) %>% 
+                                                      pull(Hospital.name),
+                                                    Patients = sapply(achd_ids, function(x)
+                                                      current_hospitals %>% 
+                                                        filter(as.numeric(!!as.symbol(x), "hours") <= 1) %>%
+                                                        summarise(hr_drive = sum(ACHD_count)) %>%
+                                                        pull(hr_drive) %>% as.integer()
+                                                    ),
+                                                    ltf = sapply(achd_ids, function(x)
+                                                      current_hospitals %>% 
+                                                        filter(as.numeric(!!as.symbol(x), "hours") <= 1) %>%
+                                                        summarise(hr_drive = sum(ltf_3)) %>%
+                                                        pull(hr_drive) %>% as.integer()
+                                                    ),
+                                                    stringsAsFactors = FALSE)
+    
+    # Output the table
+    output$current.clinic.output <- renderUI({
+      output$current.clinics.table <- renderTable(drive.values$current_clinic_table)
+      tableOutput("current.clinics.table")
+    })
+    
+    # When new clinics are added ('Add Clinic' Button is clicked), do the following
+    observeEvent(input$drive.add, {
+      
+      # The hospital ID that was selected
+      hospital_id <- htt.details$Hospital_ID[htt.details$Hospital.name == input$hospital]
+      
+      # Add the new hospital id to the clinics id list
+      if ( !(hospital_id %in% isolate(drive.values$new_achd_ids)) ) 
+      { isolate(drive.values$new_achd_ids <- append(drive.values$new_achd_ids, hospital_id)) }
+      
+      # Use the new clinics id list to recalculate the driving time to the nearest hospital
+      shortest_time_new <- htt.nsw %>%
+        select(SA2_5DIGIT, as.character(drive.values$new_achd_ids)) %>%
+        mutate(shortest_time = pmap_dbl(
+          .l = select(., -SA2_5DIGIT),
+          .f = function(...) min(...)),
+          shortest_time = duration(shortest_time, "seconds")) %>%
+        select(SA2_5DIGIT, shortest_time)
+      
+      # Add the new shortest dirving time column into the area data
+      drive.values$area_data <- drive.values$area_data %>%
+        select(-shortest_time) %>%
+        left_join(shortest_time_new, by = "SA2_5DIGIT")
+      
+      # Get driving information for select hospital
+      selected_hospital <- htt.nsw %>%
+        select(SA2_5DIGIT, as.character(hospital_id)) %>%
+        mutate(hospital = as.duration(.[[as.character(hospital_id)]])) %>%
+        left_join(drive.values$area_data, by ='SA2_5DIGIT') %>%
+        select(hospital, sa2_area, SA2_5DIGIT, ACHD_count, ltf_3, beth_1, beth_2, beth_3)
+      
+      # New row to add to clinic table
+      new.row <- isolate(data.frame(Hospital = input$hospital, 
+                                    Patients = selected_hospital %>% filter(as.numeric(hospital, "hours") <= 1) %>%
+                                                                     summarise(hr_drive = sum(ACHD_count)) %>%
+                                                                     pull(hr_drive) %>% as.integer(), 
+                                    ltf = selected_hospital %>% filter(as.numeric(hospital, "hours") <= 1) %>%
+                                                                summarise(hr_ltf = sum(ltf_3)) %>%
+                                                                pull(hr_ltf) %>% as.integer(),
+                                    stringsAsFactors = FALSE))
+      
+      # Add the new row to the clinic table, if it wasnt already selected
+      if ( !(hospital_id %in% isolate(drive.values$add_clinic_table$ID)) )
+      { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
+      
+      # Display the new clinics table
+      output$new.clinics.output <- renderUI({
+        output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
+        tableOutput("new.clinics.table")
+      })
+      
+      
+    })
+    
+    # Reset the ACHD clinics list ('Reset Clinics' Button is clicked)
+    observeEvent(input$drive.clinic.reset, {
+      
+      # Clear the clinics table
+      drive.values$add_clinic_table <- NULL
+      
+      # Display the table as nothing
+      output$new.clinics.output <- renderUI({
+        output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
+        tableOutput("new.clinics.table")
+      })
+      
+      # Reset the achd clinic ids to the original clinics
+      drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+      
+      # Reset the area data
+      drive.values$area_data <- drive.area.achd()
+    })
     
     #---------------Value Boxes-------------------#
     # Value boxes with the key data points
+    observeEvent(input$drive.update, {
     output$pt.count.drive <- renderValueBox({
-        valueBox(achd.filtered() %>% nrow(),
+        valueBox(tags$p(achd.filtered() %>% nrow(),
+                        style = "font-size: 75%;"),
                  'selected patients', 
                  width = 3, color = 'light-blue')
     })
-    output$simple.count.drive <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), 
-                 "Patients with Simple CHD", 
+    output$beth.count.drive <- renderValueBox({
+        valueBox(tags$p(
+          paste(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), " | ",
+                achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), " | ",
+                achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
+                sep = "  "),
+          style = "font-size: 75%;"),
+          'Simple | Moderate | Severe',
+           color = 'light-blue'
+        )
+    })
+    output$ltf.count.drive <- renderValueBox({
+        valueBox(tags$p(sum(achd.filtered()$ltf_3),
+                        style = "font-size: 75%;"), 
+                 "Patients Lost to Follow up", 
                  color = 'light-blue')
     })
-    output$moderate.count.drive <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), 
-                 "Patients with Moderate CHD", 
+    output$hr.count.drive <- renderValueBox({
+      valueBox(tags$p(
+                 drive.values$area_data %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                 summarise(hr_drive = sum(ACHD_count)) %>%
+                                 pull(hr_drive),
+                 style = "font-size: 75%;"),
+                 "Patients in 1hr drive to ACHD clinic", 
                  color = 'light-blue')
     })
-    output$complex.count.drive <- renderValueBox({
-        valueBox(achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
-                 "Patients with Complex CHD", 
-                 color = 'light-blue')
     })
+    
     
     #------------------Map Options----------------#
     # this phn selector
@@ -871,74 +675,6 @@ server <- function(input, output) {
             markerColor = 'orange', 
             iconColor = 'white', 
             library = "fa") )
-    
-    #-------------Reactive Values for Driving Map--------------------#
-    drive.values <- reactiveValues()
-    #For creating and editing the clinics table
-    drive.values$add_clinic_table <- data.frame(Hospital = as.character(), 
-                                            ID = as.character(), 
-                                            stringsAsFactors = FALSE)
-    #For tracking the ACHD clinic IDs selected
-    drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
-    #For the area level data
-    observe({ drive.values$area_data <- drive.area.achd() })
-    
-    # When new clinics are added ('Add Clinic' Button is clicked), do the following
-    observeEvent(input$drive.add, {
-        
-        # The hospital ID that was selected
-        hospital_id <- htt.details$Hospital_ID[htt.details$Hospital.name == input$hospital]
-        
-        # New row to add to clinic table
-        new.row <- isolate(data.frame(Hospital = input$hospital, ID = hospital_id, stringsAsFactors = FALSE))
-        
-        # Add the new row to the clinic table, if it wasnt already selected
-        if ( !(hospital_id %in% isolate(drive.values$add_clinic_table$ID)) )
-        { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
-        
-        # Display the table
-        output$new.clinics.output <- renderUI({
-            output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
-            tableOutput("new.clinics.table")
-        })
-        
-        # Add the new hospital id to the clinics id list
-        if ( !(hospital_id %in% isolate(drive.values$new_achd_ids)) ) 
-        { isolate(drive.values$new_achd_ids <- append(drive.values$new_achd_ids, hospital_id)) }
-        
-        # Use the new clinics id list to recalculate the driving time to the nearest hospital
-        shortest_time_new <- htt.nsw %>%
-            select(SA2_5DIGIT, as.character(drive.values$new_achd_ids)) %>%
-            mutate(shortest_time = pmap_dbl(
-                .l = select(., -SA2_5DIGIT),
-                .f = function(...) min(...)),
-                shortest_time = duration(shortest_time, "seconds")) %>%
-            select(SA2_5DIGIT, shortest_time)
-        
-        # Add the new shortest dirving time column into the area data
-        drive.values$area_data <- drive.values$area_data %>%
-            select(-shortest_time) %>%
-            left_join(shortest_time_new, by = "SA2_5DIGIT")
-    })
-    
-    # Reset the ACHD clinics list ('Reset Clinics' Button is clicked)
-    observeEvent(input$drive.clinic.reset, {
-
-        # Clear the clinics table
-        drive.values$add_clinic_table <- NULL
-        
-        # Display the table as nothing
-        output$new.clinics.output <- renderUI({
-            output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
-            tableOutput("new.clinics.table")
-        })
-        
-        # Reset the achd clinic ids to the original clinics
-        drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
-        
-        # Reset the area data
-        drive.values$area_data <- drive.area.achd()
-    })
     
     ############# Reactive Functions for Mapping ###############
     
@@ -1202,12 +938,176 @@ server <- function(input, output) {
                  width = 12, color = 'light-blue')
       })
       
+      #---------------AREA DIAGNOSES-----------#
+      output$area.dx.box <- renderUI({
+        box(title = paste("CHD Diagnoses in ", drive.values$event_area$sa2_area),
+            plotOutput("dx_area_plot"),
+            width = 12, height = 580
+        )
+      })
       
-      
+      output$dx_area_plot <- renderPlot({
+        drive.values$event_area %>% select(dx_codes$EPCC) %>% 
+          t() %>% as.data.frame() %>%
+          rename("dx_count" = V1) %>% 
+          mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)]) %>%
+          filter(dx_count > 0) %>%
+          ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
+          geom_bar(stat="identity") +
+          theme(axis.text.x = element_text(angle = 90)) +
+          labs(title = "Frequecy of each diagnosis", 
+               y = "count",
+               x = "") +
+          coord_flip()
+      })
       
     })
     
-#This is the closing braket for the server        
+#This is the closing braket for the server            
+    
+############################# SNAPSHOTS TAB #################################
+    
+    #---------------Value Boxes-------------------#
+    # Value boxes with the filtered data
+    
+    output$pt.count.ss <- renderValueBox({
+        valueBox(achd.filtered() %>% nrow(),
+                 'selected patients', 
+                 width = 3, color = 'light-blue')
+    })
+    output$simple.count.ss <- renderValueBox({
+        valueBox(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), 
+                 "Patients with Simple CHD", 
+                 color = 'light-blue')
+    })
+    output$moderate.count.ss <- renderValueBox({
+        valueBox(achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), 
+                 "Patients with Moderate CHD", 
+                 color = 'light-blue')
+    })
+    output$complex.count.ss <- renderValueBox({
+        valueBox(achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
+                 "Patients with Complex CHD", 
+                 color = 'light-blue')
+    })
+    
+    
+    #---------------Ploting-----------------------#
+    # Age histogram
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$age_box <- renderUI({
+            box(plotOutput("age_plot"), title = "Distribution of Patient Ages")
+        })
+    })
+    output$age_plot <- renderPlot({
+        ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
+            geom_histogram(fill = "light grey", color = "black") +
+            labs(y = "Number of Patients", 
+                 x = "Age (yrs)") +
+            theme(axis.title.x=element_blank()) +
+            theme_minimal()
+    })
+    
+    
+    # Sex bar plot
+    
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$sex_box <- renderUI({
+            box(plotOutput("sex_plot"), title = "Sex of Patients")
+        })
+    })
+    output$sex_plot <- renderPlot ({
+        achd.filtered() %>% filter(!is.na(sex)) %>%
+            ggplot(aes(x=sex)) +
+            geom_bar(fill = "light grey", color = "black") +
+            scale_x_discrete(name = "",
+                             labels=c("1" = "Male", "2" = "Female",
+                                      "4" =  "Neither Female or Male")) +
+            labs(y = "Number of Patients") +
+            theme(axis.title.x=element_blank()) +
+            theme_minimal()
+    })
+    
+    # Number of Diagnoses
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$ndx_box <- renderUI({
+            box(plotOutput("ndx_plot"), title = "Number of CHD Diagnoses per Patient")
+        })
+    })
+    output$ndx_plot <- renderPlot ({
+        ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
+            geom_bar(fill = "light grey", color = "black") +
+            scale_x_continuous() +
+            labs(x = "Number of Diagnoses", 
+                 y = "Number of Patients") +
+            theme() +
+            theme_minimal() 
+    })
+    
+    
+    # Number of Clinic Visits
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$nclinic_box <- renderUI({
+            box(plotOutput("nclinic_plot"), title = "Number of Clinic Visits per Patient")
+        })
+    })
+    output$nclinic_plot <- renderPlot ({
+        ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
+            geom_bar(fill = "light grey", color = "black") +
+            scale_x_continuous() +
+            labs(x = "Number of Clinic Visits", 
+                 y = "Number of Patients") +
+            theme() +
+            theme_minimal() 
+    })
+    
+    ### Frequency of Diagnoses
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$dx_box <- renderUI({
+            box(plotOutput("dx_plot", height = 750), 
+                title = "Frequency of Each Diagnosis",
+                width = 12, height = 825)
+        })
+    })
+    output$dx_plot <- renderPlot({
+        dx.count() %>% filter(dx_count > 0) %>% 
+        ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
+            geom_bar(stat="identity") +
+            theme(axis.text.x = element_text(angle = 90)) +
+            labs(title = "Frequecy of each diagnosis", 
+                 y = "count",
+                 x = "") +
+            coord_flip()
+    })
+    
+
+
+
+
+    
+############################# DOWNLOAD REPORT #################################
+    output$report.dl <- downloadHandler(
+      filename = "Report.html",
+      
+      content = function(file) {
+        # Copy the report file to a temporary directory before processing it, in
+        # case we don't have write permissions to the current working dir (which
+        # can happen when deployed).
+        
+        tempReport <- file.path(tempdir(), "Report.Rmd")
+        file.copy("Report.Rmd", tempReport, overwrite = TRUE)
+        
+        rmarkdown::render(tempReport, output_file = file)
+        
+      }
+      
+    )
+    
 }
 
 
