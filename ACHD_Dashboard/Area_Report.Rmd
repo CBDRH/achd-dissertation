@@ -1,0 +1,46 @@
+
+``` {r, echo = FALSE}
+selected_area <- drive.values$area_data %>% filter(SA2_5DIGIT == {{i}})
+```
+
+## Area Focus: `r selected_area$sa2_area` 
+
+&nbsp; 
+
+<div style= "float:right;
+             position: relative;
+             left: -220px;
+             ">
+``` {r, echo = FALSE}
+leaflet() %>%
+            addTiles() %>%
+            # Add Polygons
+            addPolygons(
+                data = subset(drive.polys(), drive.polys()$NAME16 == selected_area$sa2_area),
+                color = 'black',
+                fill = 'white')
+```
+</div>
+
+
+<div style= "line-height: 2.5;
+             font-size: 15px;">
+Number of ACHD Patients: `r selected_area$ACHD_count`  
+Number with: Simple CHD: `r selected_area$beth_1` | Moderate CHD: `r selected_area$beth_2` | Complex CHD: `r selected_area$beth_3`  
+Number of Patients lost to follow up: `r selected_area$ltf_3`  
+Index of Relative Socio-economic Disadvantage (IRSD): `r selected_area$IRSD`  
+Accessibility and Remoteness Index of Australia (percentage of population living in):  
+
+* Major Cities: `r percent(selected_area$major_cities)`  
+* Inner Regional: `r percent(selected_area$inner_regional)`  
+* Outer Regional: `r percent(selected_area$outer_regional)`  
+* Remote: `r percent(selected_area$remote)`  
+* Very Remote: `r percent(selected_area$very_remote)`  
+
+Driving time to nearest clinic:  
+
+* Current Clinic Locations: `r round(as.numeric(area.achd$shortest_time[area.achd$sa2_area == selected_area$sa2_area], 'hours'), digits = 2)` hours
+* With New Clinics Added: `r round(as.numeric(selected_area$shortest_time, 'hours'), digits = 2)` hours
+
+</div>
+

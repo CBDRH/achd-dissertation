@@ -120,10 +120,85 @@ prepare.area.data <- function(achd_data) {
 area.achd <- prepare.area.data(achd)
 ```
 
+
+
 ``` {r}
-combined.poly <- st_combine(sa2.polys)
+# Some area level demographics to display
+no.areas <- area.achd %>% nrow()
+
+no.areas.syd <- area.achd %>% filter(GCC_NAME == "Greater Sydney") %>% nrow()
+
+no.areas.nsw <- area.achd %>% filter(GCC_NAME == "Rest of NSW") %>% nrow()
+
+no.areas.act <- area.achd %>% filter(GCC_NAME == "Australian Capital Territory") %>% nrow()
+
+avg.drive <- area.achd %>% 
+                    summarise(st_avg = mean(as.numeric(shortest_time, 'hours'), na.rm = TRUE)) %>%
+                    pull(st_avg)
+
+avg.drive.syd <- area.achd %>% 
+                    filter(GCC_NAME == "Greater Sydney") %>%
+                    summarise(st_avg = mean(as.numeric(shortest_time, 'hours'), na.rm = TRUE)) %>%
+                    pull(st_avg)
+
+avg.drive.nsw <- area.achd %>% 
+                    filter(GCC_NAME == "Rest of NSW") %>%
+                    summarise(st_avg = mean(as.numeric(shortest_time, 'hours'), na.rm = TRUE)) %>%
+                    pull(st_avg)
+
+avg.drive.act <- area.achd %>% 
+                    filter(GCC_NAME == "Australian Capital Territory") %>%
+                    summarise(st_avg = mean(as.numeric(shortest_time, 'hours'), na.rm = TRUE)) %>%
+                    pull(st_avg)
+
+no.hr <- area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                       nrow()
+
+no.hr.syd <- area.achd %>% 
+                       filter(GCC_NAME == "Greater Sydney") %>%
+                       filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                       nrow()
+
+no.hr.nsw <- area.achd %>% 
+                       filter(GCC_NAME == "Rest of NSW") %>%
+                       filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                       nrow()
+
+no.hr.act <- area.achd %>% 
+                       filter(GCC_NAME == "Australian Capital Territory") %>%
+                       filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                       nrow()
+
 
 ```
+
+
+``` {r}
+area.summary <- data.frame(
+  no.areas = c(no.areas, no.areas.syd, no.areas.nsw, no.areas.act),
+  n.area.hr = c(no.hr, no.hr.syd, no.hr.nsw, no.hr.act),
+  avg.drive = c(avg.drive, avg.drive.syd, avg.drive.nsw, avg.drive.act),
+  row.names = c("All", "Greater Sydney", "Rest of New South Wales", "ACT")
+)
+
+
+```
+
+
+``` {r}
+library(gt)
+library(kableExtra)
+
+gt(area.summary)
+kbl(area.summary, 
+    booktabs = T,
+    col.names = c("No. of Areas",
+                  "No. Areas < 1hr Drive",
+                  "Average Driving Time"))
+
+
+```
+
 
 
 ``` {r}
@@ -223,7 +298,6 @@ selected_hospital <- htt.nsw %>%
 
 
 ```
-
 
 ``` {r}
 current_hospitals <- htt.nsw %>%
@@ -371,30 +445,146 @@ seq(0,
 ```
 
 
-# Set up parameters to pass to Rmd document
-        params <- list(beth = input$sb.bethesda,
-                       sex = input$sb.sex,
-                       mort = input$sb.mortality,
-                       age = input$sb.age,
-                       date = input$sb.dates,
-                       clinic = input$sb.last.clinic)
-        
-        print("This is the report")
-print(params$beth)
-print(params$sex)
-print(params$mort)
-print(params$age)
-print(params$date)
-print(params$clinic)
+
+# Plots
+                fluidRow(uiOutput("age_box"),
+                         uiOutput("ltf_box")
+                ),
+                fluidRow(
+                  box(uiOutput("sex_box"), width = 4),
+                  box(uiOutput("ndx_box"), width = 4),
+                  box(uiOutput("nclinic_box"), width = 4)
+                ),
+                fluidRow(
+                  uiOutput("dx_box")
+
+
+ #---------------Ploting-----------------------#
+    # Age histogram
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$age_box <- renderUI({
+            box(plotOutput("age_plot",
+                           height = 200))
+        })
+    })
+    
+    output$age_plot <- renderPlot({
+        ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
+            geom_histogram(fill = "light grey", color = "black") +
+            labs(y = "Number of Patients", 
+                 x = "Age (yrs)") +
+            theme(axis.title.x=element_blank()) +
+            theme_minimal()
+    })
+    
+    # Time since last clinic plot
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+                     output$ltf_box <- renderUI({
+                       box(plotOutput("ltf_plot",
+                                      height = 200))
+                     })
+                   })
+    output$ltf_plot <- renderPlot({
+      ggplot(achd.filtered(), aes(x=as.numeric(gap_2000, "years"))) +
+        geom_histogram(fill = "light grey", color = "black") +
+        labs(y = "Number of Patients", 
+             x = "Time since last clinic visit (yrs)") +
+        theme(axis.title.x=element_blank()) +
+        theme_minimal()
+    })
+    
+    
+    # Sex bar plot
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$sex_box <- renderUI({
+            plotOutput("sex_plot",
+                       height = 200)
+            
+        })
+    })
+    output$sex_plot <- renderPlot ({
+        achd.filtered() %>% filter(!is.na(sex)) %>%
+            ggplot(aes(x=sex)) +
+            geom_bar(fill = "light grey", color = "black") +
+            scale_x_discrete(name = "Sex",
+                             labels=c("1" = "Male", "2" = "Female",
+                                      "4" =  "Neither Female or Male")) +
+            labs(y = "Number of Patients") +
+            theme(axis.title.x=element_blank()) +
+            theme_minimal()
+    })
+    
+    # Number of Diagnoses
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$ndx_box <- renderUI({
+            plotOutput("ndx_plot",
+                       height = 200)
+        })
+    })
+    output$ndx_plot <- renderPlot ({
+        ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
+            geom_bar(fill = "light grey", color = "black") +
+            scale_x_continuous() +
+            labs(x = "Number of Diagnoses", 
+                 y = "Number of Patients") +
+            theme() +
+            theme_minimal() 
+    })
+    
+    
+    # Number of Clinic Visits
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$nclinic_box <- renderUI({
+            plotOutput("nclinic_plot",
+                       height = 200)
+        })
+    })
+    output$nclinic_plot <- renderPlot ({
+        ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
+            geom_bar(fill = "light grey", color = "black") +
+            scale_x_continuous() +
+            labs(x = "Number of Clinic Visits", 
+                 y = "Number of Patients") +
+            theme() +
+            theme_minimal() 
+    })
+    
+    ### Frequency of Diagnoses
+    observeEvent(c(input$sb.update,
+                   input$load.data), ignoreInit = T, {
+        output$dx_box <- renderUI({
+          div(style = 'overflow-y:scroll;height:500px;',
+              box(plotOutput("dx_plot", height = 1500), 
+                width = 12, height = 1500)
+             )
+        })
+    })
+    output$dx_plot <- renderPlot({
+        dx.count() %>% filter(dx_count > 0) %>% 
+        ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
+            geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
+            theme(axis.text.x = element_text(angle = 90)) +
+            labs(title = "Frequecy of each diagnosis", 
+                 y = "count",
+                 x = "") +
+            coord_flip() +
+            theme_minimal()
+    })
 
 
 
-params:
-  beth: NA
-  sex: NA
-  mort: NA
-  age: NA
-  date: NA
-  clinic: NA
+``` {r}
+input = "Tamworth"
+
+list = c()
+
+
+```
+
 
 

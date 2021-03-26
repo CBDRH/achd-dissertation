@@ -1,0 +1,308 @@
+---
+title: "Corr_test"
+author: "Calum Nicholson"
+date: "19/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(shinydashboard)
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(ggplot2)
+library(rgdal)
+library(sp)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+
+```
+
+
+``` {r}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+app_data <- '../ACHD_Dashboard/data/'
+
+```
+
+
+``` {r}
+################################## LOAD DATA ############################################
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD.Database.name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+                            mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                                   IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+
+#import htt data
+htt.nsw <- readRDS(file = paste(app_data, 'AP_output/htt_nsw.rds', sep=""))
+htt.details <- readRDS(file = paste(app_data, 'AP_output/htt_details.rds', sep=""))
+
+#current achd clinics
+achd_ids <- c(646, 755, 152, 683, 737, 979)
+#placeholer for adding new clinics
+new_achd_ids <- achd_ids
+
+#Import area polygons
+sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
+
+```
+
+``` {r}
+test <- achd %>% mutate(
+              # not seen for more than 3 years
+              ltf_3 = ifelse(as.numeric(gap_2000, 'years') > 3, 1, 0),
+              # not seen for more than 4 years
+              ltf_4 = ifelse(as.numeric(gap_2000, 'years') > 4, 1, 0),
+              # not seen for more than 5 years
+              ltf_5 = ifelse(as.numeric(gap_2000, 'years') > 5, 1, 0),
+)
+
+
+
+```
+
+
+
+``` {r}
+
+prepare.area.data <- function(achd_data) {
+    # Diagnosis severity counts in each area
+    beth.drive <- achd_data %>%
+        group_by(sa2) %>%
+        dplyr::summarise(ACHD_count = n(), 
+                         beth_1 = sum(bethesda_code == 1),
+                         beth_2 = sum(bethesda_code == 2), 
+                         beth_3 = sum(bethesda_code == 3), 
+                         beth_4 = sum(bethesda_code == 4),
+                         ltf_3 = sum(ltf_3),
+                         ltf_4 = sum(ltf_4),
+                         ltf_5 = sum(ltf_5))
+        
+    
+    # Diagnoses present in each area 
+    dx.drive <- achd_data %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+        group_by(sa2) %>% 
+        summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+    
+    # Join above to table builer data
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
+    
+    area.drive
+    }
+
+
+
+
+```
+
+``` {r}
+area.achd <- prepare.area.data(achd) %>%
+                    # recreate outcome variable as numeric in minutes
+                    mutate(st_min = as.numeric(shortest_time, 'minutes'))
+
+
+```
+
+
+``` {r}
+# scatter plots for each variable by the shortest time to an achd clinic
+scatter.vars <- function(var) {
+  #Make the plot
+  ggplot(data = area.achd, aes_string(x = 'st_min', y = var)) + 
+    geom_point() +
+    geom_smooth(color = "Blue", se=FALSE, size = 0.5) +
+    geom_smooth(method = "lm", color = "red", se=FALSE, size = 0.5) +
+    scale_y_continuous(breaks = seq(0,660,60)) +
+    ggtitle(var)
+}
+```
+
+``` {r}
+library(ggpubr)
+
+# scatter plots for each variable by the shortest time to an achd clinic
+scatter.vars <- function(var) {
+  #Make the plots
+  all <- ggplot(data = area.achd, aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,600)) +
+                ggtitle("All")
+  
+  syd <- area.achd %>% filter(GCC_NAME == "Greater Sydney") %>%
+              ggplot(aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,100)) +
+                ggtitle("Sydney")
+  
+  nsw <- area.achd %>% filter(GCC_NAME == "Rest of NSW") %>%
+              ggplot(aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,600)) +
+                ggtitle("Rest of New South Wales")
+  
+  act <- area.achd %>% filter(GCC_NAME == "Australian Capital Territory") %>%
+              ggplot(aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,100)) +
+                ggtitle("ACT")
+  
+  layout <- ggarrange(all, syd, nsw, act, 
+            nrow = 2, ncol = 2)
+  
+  annotate_figure(layout,
+                  bottom = text_grob("Shortest Time (mins)",
+                                     size = 10),
+                  left = text_grob(var, rot = 90,
+                                   size = 10)
+  )
+}
+
+```
+
+``` {r}
+scatter.vars('ltf_3')
+```
+
+``` {r}
+scatter.vars('ACHD_count')
+```
+
+
+``` {r}
+scatter.vars('beth_1')
+```
+
+``` {r}
+scatter.vars('beth_2')
+```
+
+``` {r}
+scatter.vars('beth_3')
+```
+
+
+``` {r}
+scatter.vars('IRSD')
+```
+
+``` {r}
+area.achd.2 <- area.achd %>%
+                  mutate(remote_all = remote + very_remote,
+                         regional_all = inner_regional + outer_regional)
+```
+
+``` {r}
+# scatter plots for each variable by the shortest time to an achd clinic
+scatter.vars.2 <- function(var) {
+  #Make the plots
+  all <- ggplot(data = area.achd.2, aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,600)) +
+                ggtitle("All")
+  
+  syd <- area.achd.2 %>% filter(GCC_NAME == "Greater Sydney") %>%
+              ggplot(aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,100)) +
+                ggtitle("Sydney")
+  
+  nsw <- area.achd.2 %>% filter(GCC_NAME == "Rest of NSW") %>%
+              ggplot(aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,600)) +
+                ggtitle("Rest of New South Wales")
+  
+  act <- area.achd.2 %>% filter(GCC_NAME == "Australian Capital Territory") %>%
+              ggplot(aes_string(x = 'st_min', y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,100)) +
+                ggtitle("ACT")
+  
+  layout <- ggarrange(all, syd, nsw, act, 
+            nrow = 2, ncol = 2)
+  
+  annotate_figure(layout,
+                  bottom = text_grob("Shortest Time (mins)",
+                                     size = 10),
+                  left = text_grob(var, rot = 90,
+                                   size = 10)
+  )
+}
+
+```
+
+``` {r}
+scatter.vars.2('remote_all')
+```
+
+``` {r}
+scatter.vars.2('regional_all')
+```
+
+``` {r}
+scatter.vars.2('major_cities')
+```
+
+
+``` {r}
+ggplot(data = area.achd.2, aes(x = ltf_3, y = var)) +
+                geom_point() +
+                theme(axis.title.x=element_blank(),
+                      axis.title.y=element_blank()
+                      ) +
+                scale_x_continuous(limits = c(0,600)) +
+                ggtitle("All")
+```
+
+
+
+
+
+
+

@@ -4,6 +4,12 @@ output: html_document
 
 ---
 
+---
+title: "test_driving_map"
+author: "Calum Nicholson"
+date: "26/02/2021"
+output: html_document
+---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -11,12 +17,101 @@ library(tidyverse)
 library(scales)
 library(lubridate)
 library(ggplot2)
+library(ggpubr)
 library(rgdal)
 library(sp)
 library(sf)
 library(leaflet)
 library(leaflet.extras)
 library(tableHTML)
+library(knitr)
+library(kableExtra)
+
+```
+
+
+``` {r}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+app_data <- '../ACHD_Dashboard/data/'
+
+```
+
+
+``` {r}
+################################## LOAD DATA ############################################
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD.Database.name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+                            mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                                   IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+
+#import htt data
+htt.nsw <- readRDS(file = paste(app_data, 'AP_output/htt_nsw.rds', sep=""))
+htt.details <- readRDS(file = paste(app_data, 'AP_output/htt_details.rds', sep=""))
+
+#current achd clinics
+achd_ids <- c(646, 755, 152, 683, 737, 979)
+#placeholer for adding new clinics
+new_achd_ids <- achd_ids
+
+#Import area polygons
+sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
+
+```
+
+``` {r}
+
+prepare.area.data <- function(achd_data) {
+    # Diagnosis severity counts in each area
+    beth.drive <- achd_data %>%
+        group_by(sa2) %>%
+        dplyr::summarise(ACHD_count = n(), 
+                         beth_1 = sum(bethesda_code == 1),
+                         beth_2 = sum(bethesda_code == 2), 
+                         beth_3 = sum(bethesda_code == 3), 
+                         beth_4 = sum(bethesda_code == 4),
+                         ltf_3 = sum(ltf_3),
+                         ltf_4 = sum(ltf_4),
+                         ltf_5 = sum(ltf_5))
+        
+    
+    # Diagnoses present in each area 
+    dx.drive <- achd_data %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+        group_by(sa2) %>% 
+        summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+    
+    # Join above to table builer data
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
+    
+    area.drive
+    }
+
+```
+
+``` {r}
+area.achd <- prepare.area.data(achd)
+```
+
+``` {r}
+drive.poly <- merge(sa2.polys, area.achd, by.x = 'NAME16', by.y = 'sa2_area')
+
 ```
 
 This report was generated on `r Sys.Date()` from the Adult Congenital Heart Disease Clinic Planning Tool
@@ -24,16 +119,22 @@ This report was generated on `r Sys.Date()` from the Adult Congenital Heart Dise
 ## Patient Data
 
 ``` {r}
+# Some named list that can be used to pull the labels for each of the filters used on the patient data
+
+# Sex filter
+sex <- list('1' = 'Male',
+            '2' = 'Female',
+            '4' = 'Neither')
+
+# bethesda severity filter
 beth <- list('1' ="Simple",
              '2' ="Moderate",
              '3' ="Severe",
-             '4' = "unknown")
+             '4' = "Unknown")
 
-beth.selected <- beth %in% c('1','2','3')
-
-beth.selected
-
-beth[c('1','2','3')]
+# Mortality Status filter
+mort <- list('0' = 'Alive',
+             '1' = 'Deceased')
 ```
 
 The Patient Dataset had the following filters applied:  
@@ -46,14 +147,272 @@ The Patient Dataset had the following filters applied:
 * __Mortality Status:__ Alive  
   
 
-After Filtering, these are some basic demographics of the patient data:  
+``` {r, include = FALSE, echo = FALSE }
+# Some dempographic values to display
+achd.no <- achd %>% nrow()
+simple.no <- achd %>% filter(bethesda_code == 1) %>% nrow()
+moderate.no <- achd %>% filter(bethesda_code == 2) %>% nrow()
+complex.no <- achd %>% filter(bethesda_code == 3) %>% nrow()
+lft.no <- sum(achd$ltf_3)
+hr.no <- area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                              summarise(hr_drive = sum(ACHD_count)) %>%
+                              pull(hr_drive)
 
-* __Number of Patients:__ 1000  
-* __Number with Simple CHD:__  1000  
-* __Number with Moderate CHD:__ 1000
-* __Number with Complex CHD:__ 1000
-* __Number of Patients Lost to Follow up:__ 1000  
-* __Number of Patients with a 1 hour drive to a clinic:__ 1000  
+```
+
+``` {r}
+pt.summary <- data.frame(no.patient = achd %>% summarise(
+                                                    achd.no = n(),
+                                                    simple.no = sum(bethesda_code == 1),
+                                                    moderate.no = sum(bethesda_code == 2),
+                                                    complex.no = sum(bethesda_code == 3)
+                                                  ) %>% t(),
+                         ltf.patient = achd %>% filter(ltf_3 == 1) %>%
+                                                summarise(
+                                                    achd.no = n(),
+                                                    simple.no = sum(bethesda_code == 1),
+                                                    moderate.no = sum(bethesda_code == 2),
+                                                    complex.no = sum(bethesda_code == 3)
+                                                  )  %>% t(),
+                         hr.patient = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                    summarise(
+                                                      hr.no = sum(ACHD_count),
+                                                      hr.simple = sum(beth_1),
+                                                      hr.moderate = sum(beth_2),
+                                                      hr.complex = sum(beth_3)
+                                                    ) %>% t()
+                          ) %>% 
+                            mutate(ltf.percent = percent( ltf.patient / no.patient ),
+                                   hr.percent = percent( hr.patient / no.patient )) %>%
+                            select(no.patient, ltf.percent, hr.percent)
+
+row.names(pt.summary) <- c("All", "Simple CHD", "Moderate CHD", "Complex CHD")
+```
+
+
+``` {r}
+pt.summary %>%
+  kbl(align=rep('c', 3),
+      col.names = c("No. Patients",
+                  "Lost to F/up",
+                  "Pts < 1 hr drive"),
+      caption = "<b>Table 1</b>: Number of patients, lost to follow up rates and driving time to clinics;
+                                 by disease severity") %>%
+  kable_classic_2(full_width = F, position = "left",
+                  html_font = "Cambria",
+                  font_size = 16)
+```
+
+``` {r}
+area.summary <- data.frame(
+  no.areas = area.achd %>% summarise(
+                      no.areas = n(),
+                      no.areas.syd = sum(GCC_NAME == "Greater Sydney", na.rm = TRUE),
+                      no.areas.nsw = sum(GCC_NAME == "Rest of NSW", na.rm = TRUE),
+                      no.areas.act = sum(GCC_NAME == "Australian Capital Territory", na.rm = TRUE),
+                           ) %>% t(),
+  n.area.hr = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                        summarise(
+                        no.areas = n(),
+                        no.areas.syd = sum(GCC_NAME == "Greater Sydney", na.rm = TRUE),
+                        no.areas.nsw = sum(GCC_NAME == "Rest of NSW", na.rm = TRUE),
+                        no.areas.act = sum(GCC_NAME == "Australian Capital Territory", na.rm = TRUE),
+                            ) %>% t(),
+  avg.drive = avg.drive <- area.achd %>% 
+                    summarise(avg.drive = mean(as.numeric(shortest_time, 'hours'), na.rm = TRUE),
+                              avg.drive.syd = mean(as.numeric(shortest_time[.$GCC_NAME == "Greater Sydney"], 'hours'), 
+                                                   na.rm = TRUE),
+                              avg.drive.nsw = mean(as.numeric(shortest_time[.$GCC_NAME == "Rest of NSW"], 'hours'), 
+                                                   na.rm = TRUE),
+                              avg.drive.act = mean(as.numeric(shortest_time[.$GCC_NAME == "Australian Capital Territory"],
+                                                              'hours'), 
+                                                   na.rm = TRUE),
+                              ) %>% t()
+                ) %>%
+                mutate(p.area.hr = percent(n.area.hr / no.areas) ) %>%
+                select(no.areas, n.area.hr, p.area.hr, avg.drive)
+
+row.names(area.summary) <- c("All", "Greater Sydney", "Rest of NSW", "ACT")
+```
+
+
+``` {r}
+area.summary %>%
+  kbl(align=rep('c', 4),
+      col.names = c("No. Areas",
+                  "Areas < 1hr",
+                  "Areas < 1hr (%)",
+                  "Avg Drive Time (hr)"),
+      caption = "<b>Table 2</b>: Number of areas within one hour drive
+                 to an ACHD clinic and the average driving time to ACHD clinics") %>%
+  kable_classic_2(bootstrap_options = "striped", full_width = F, position = "center")
+
+```
+
+
+``` {r}
+area_n_plot <- ggplot(area.achd, aes(x=ACHD_count)) +
+                  geom_bar(fill = "light grey", color = "black") +
+                  labs(y = "No. SA2 Areas", 
+                       x = "Number of Patients") +
+                  theme(axis.title.x=element_blank()) +
+                  theme_minimal()
+
+area_ltf_plot <- ggplot(area.achd, aes(x=ltf_3)) +
+                  geom_bar(fill = "light grey", color = "black") +
+                  labs(y = "No.SA2 Areas", 
+                       x = "Patients Lost to Follow Up") +
+                  theme(axis.title.x=element_blank()) +
+                  theme_minimal()
+
+ggarrange(area_n_plot, area_ltf_plot, ncol = 2)
+
+```
+
+
+
+``` {r}
+area_st_plot <- function() {
+          all <- ggplot(area.achd, aes(x=as.numeric(shortest_time, "min"))) +
+                            geom_histogram(fill = "light grey", bins = 50,
+                                           color = "black", size = 0.25) +
+                            theme_minimal() +
+                            theme(axis.title.x=element_blank(),
+                                  axis.title.y=element_blank()
+                                  ) +
+                            scale_x_continuous(limits = c(0,600)) +
+                              ggtitle("All")
+          
+          syd <- area.achd %>% filter(GCC_NAME == "Greater Sydney") %>%
+                            ggplot(aes(x=as.numeric(shortest_time, "min"))) +
+                              geom_histogram(fill = "light grey", bins = 50,
+                                             color = "black", size = 0.25) +
+                              theme_minimal() +
+                              theme(axis.title.x=element_blank(),
+                                    axis.title.y=element_blank()
+                                    ) +
+                              scale_x_continuous(limits = c(0,100)) +
+                              ggtitle("Sydney")
+          
+          nsw <- area.achd %>% filter(GCC_NAME == "Rest of NSW") %>%
+                            ggplot(aes(x=as.numeric(shortest_time, "min"))) +
+                              geom_histogram(fill = "light grey", bins = 50,
+                                             color = "black", size = 0.25) +
+                              theme_minimal() +
+                              theme(axis.title.x=element_blank(),
+                                    axis.title.y=element_blank()
+                                    ) +
+                              scale_x_continuous(limits = c(0,600)) +
+                              ggtitle("Rest of NSWa") 
+          
+          act <- area.achd %>% filter(GCC_NAME == "Australian Capital Territory") %>%
+                            ggplot(aes(x=as.numeric(shortest_time, "min"))) +
+                              geom_histogram(fill = "light grey", bins = 50,
+                                             color = "black", size = 0.25) +
+                              theme_minimal() +
+                              theme(axis.title.x=element_blank(),
+                                    axis.title.y=element_blank()
+                                    ) +
+                              scale_x_continuous(limits = c(0,100)) +
+                              ggtitle("ACT")
+          
+          layout <- ggarrange(all, syd, nsw, act, nrow = 2, ncol = 2)
+          
+          annotate_figure(layout,
+                          bottom = text_grob("Driving Time (mins)",
+                                               size = 10),
+                          left = text_grob("No.SA2 Areas", rot = 90,
+                                             size = 10)
+                          )
+
+}
+```
+
+
+``` {r}
+area_st_plot()
+```
+                    
+                    
+&nbsp;  
+
+### Average Driving time to ACHD Clinics  
+The map below details the driving time from each SA2 area in NSW to the nearest ACHD Clinic. Driving times are calculated from the centre of each area.
+
+&nbsp; 
+
+``` {r}
+clinic.compare.current <- data.frame(
+                        no_pt = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(no_pt = sum(ACHD_count)),
+                        ltf_no = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(ltf_no = sum(ltf_3)),
+                        avg_drive = area.achd %>% summarise(avg_drive = mean(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE)),
+                        long_drive = area.achd %>% summarise(long_drive = max(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE))
+                      ) %>% mutate(
+                        hr_p = no_pt / sum(area.achd$ACHD_count),
+                        ltf_p = ltf_no / sum(area.achd$ltf_3)
+                      ) %>%
+                      select(no_pt, hr_p, ltf_no, ltf_p, avg_drive, long_drive)
+
+
+clinic.compare.new <- data.frame(
+                        no_pt = drive.poly@data %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(no_pt = sum(ACHD_count)),
+                        ltf_no = drive.poly@data %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(ltf_no = sum(ltf_3)),
+                        avg_drive = drive.poly@data %>% summarise(avg_drive = mean(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE)),
+                        long_drive = drive.poly@data %>% summarise(long_drive = max(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE))
+                      ) %>% mutate(
+                        hr_p = no_pt / sum(drive.poly@data$ACHD_count),
+                        ltf_p = ltf_no / sum(drive.poly@data$ltf_3)
+                      ) %>%
+                      select(no_pt, hr_p, ltf_no, ltf_p, avg_drive, long_drive)
+
+diff <- data.frame(
+  no_pt = clinic.compare.new$no_pt - clinic.compare.current$no_pt,
+  hr_p = clinic.compare.new$hr_p - clinic.compare.current$hr_p,
+  ltf_no = clinic.compare.new$ltf_no - clinic.compare.current$ltf_no,
+  ltf_p = clinic.compare.new$ltf_p - clinic.compare.current$ltf_p,
+  avg_drive = clinic.compare.new$avg_drive - clinic.compare.current$avg_drive,
+  long_drive = clinic.compare.new$long_drive - clinic.compare.current$long_drive
+)
+
+clinic.comapre = rbind(clinic.compare.current, clinic.compare.new, diff) %>%
+                    mutate(hr_p = percent(hr_p),
+                           ltf_p = percent(ltf_p))
+
+
+```
+
+``` {r}
+leaflet() %>%
+            addTiles() %>%
+            # Add Polygons
+            addPolygons(
+                data = subset(drive.poly, drive.poly$NAME16 == "Dubbo Region"),
+                color = 'black',
+                fill = 'white')
+
+```
+
+
+
+
+
+
+
+``` {r}
+current.hr.no / sum(area.achd$ACHD_count)
+
+```
+
+
+
 
 
 

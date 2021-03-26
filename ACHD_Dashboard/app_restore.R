@@ -191,7 +191,6 @@ body <- dashboardBody(
                              width = 9, height = 580),
                          column(width = 3,
                              fluidRow(valueBoxOutput('dr.area.name', width = 12)), # Area name
-                             fluidRow(uiOutput('area.report'), width = 12),
                              fluidRow(valueBoxOutput('pt.count.area', width = 12)), # Patient Count
                              fluidRow(valueBoxOutput('pt.beth.area', width = 12)), # Breakdown of disease Severity
                              fluidRow(valueBoxOutput('pt.lft.area', width = 12)), # Number of Patients lost to follow up
@@ -220,19 +219,16 @@ body <- dashboardBody(
                          valueBoxOutput('moderate.count.ss', width = 3),
                          valueBoxOutput('complex.count.ss', width = 3)
                 ),
-                
                 # Plots
                 fluidRow(uiOutput("age_box"),
-                         uiOutput("ltf_box")
+                         uiOutput("sex_box")
                 ),
                 fluidRow(
-                  box(uiOutput("sex_box"), width = 4),
-                  box(uiOutput("ndx_box"), width = 4),
-                  box(uiOutput("nclinic_box"), width = 4)
+                  uiOutput("ndx_box"),
+                  uiOutput("nclinic_box")
                 ),
                 fluidRow(
                   uiOutput("dx_box")
-                
                 )
         )
     )
@@ -450,26 +446,18 @@ server <- function(input, output) {
                                                 stringsAsFactors = FALSE)
     #For tracking the ACHD clinic IDs selected
     drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
-    #For adding new areas for report summary
-    drive.values$area.report.list <- c()
     #For the area level data
     observe({ drive.values$area_data <- drive.area.achd() })
     
-    # Buiding the Current Clinics table
-    observeEvent(
-      
-      c(input$sb.update,
-        input$load.data), ignoreInit = T, # Triggers on either load data, or update filters
-      
-      {
-    
-    # Create driving data table for the current clinics
+    #Create driving data table for the current clinics
+    observe({
     current_hospitals <- htt.nsw %>%
                           select(SA2_5DIGIT, as.character(achd_ids)) %>%
                           mutate_at(as.character(achd_ids), as.duration) %>%
                           left_join(drive.area.achd(), by ='SA2_5DIGIT') %>%
                           select(as.character(achd_ids), sa2_area, SA2_5DIGIT, ACHD_count, 
                                  ltf_3, beth_1, beth_2, beth_3)
+    })
     
     # Make a table summarise the current clinics
     drive.values$current_clinic_table <- data.frame(Hospital = htt.details %>% filter(Hospital_ID %in% achd_ids) %>% 
@@ -493,8 +481,6 @@ server <- function(input, output) {
       output$current.clinics.table <- renderTable(drive.values$current_clinic_table)
       tableOutput("current.clinics.table")
     })
-    
-      })
     
     # When new clinics are added ('Add Clinic' Button is clicked), do the following
     observeEvent(input$drive.add, {
@@ -528,8 +514,7 @@ server <- function(input, output) {
         select(hospital, sa2_area, SA2_5DIGIT, ACHD_count, ltf_3, beth_1, beth_2, beth_3)
       
       # New row to add to clinic table
-      new.row <- isolate(data.frame(Hospital = input$hospital,
-                                    ID = hospital_id,
+      new.row <- isolate(data.frame(Hospital = input$hospital, 
                                     Patients = selected_hospital %>% filter(as.numeric(hospital, "hours") <= 1) %>%
                                                                      summarise(hr_drive = sum(ACHD_count)) %>%
                                                                      pull(hr_drive) %>% as.integer(), 
@@ -539,7 +524,7 @@ server <- function(input, output) {
                                     stringsAsFactors = FALSE))
       
       # Add the new row to the clinic table, if it wasnt already selected
-      if ( !(input$hospital %in% isolate(drive.values$add_clinic_table$Hospital)) )
+      if ( !(hospital_id %in% isolate(drive.values$add_clinic_table$ID)) )
       { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
       
       # Display the new clinics table
@@ -759,7 +744,7 @@ server <- function(input, output) {
                 lapply(htmltools::HTML)
     })
     
-    ############# BASE MAP ###############
+    #------------------Base Map----------------#
     # output the basic version of the map with elements that don't change
     output$drive.map <- renderLeaflet({ 
         leaflet() %>%
@@ -876,7 +861,7 @@ server <- function(input, output) {
     
     # Adding Markers for New clinics
     observeEvent(input$drive.update, {
-        if ( length(drive.values$add_clinic_table$Hospital) != 0) {
+        if ( length(drive.values$add_clinic_table$ID != 0)) {
             leafletProxy("drive.map") %>%
                 # Clear old markers 
                 clearGroup(group = "new_markers") %>%
@@ -911,10 +896,6 @@ server <- function(input, output) {
         valueBox(tags$p(drive.values$event_area$sa2_area, style = "font-size: 50%;"),
                  '', 
                  width = 12, color = 'light-blue')
-      })
-      
-      output$area.report <- renderUI({
-        actionButton('area.button', 'Add area summary to report')
       })
       
       output$pt.count.area <- renderValueBox({
@@ -980,16 +961,9 @@ server <- function(input, output) {
           coord_flip()
       })
       
-      # Adding the area summary to the report (Really we are just adding the each new area name to a list)
-      observeEvent(input$area.button, {
-        print(drive.values$event_area$SA2_5DIGIT)
-        print(isolate(drive.values$area.report.list))
-        if ( !(drive.values$event_area$SA2_5DIGIT %in% drive.values$area.report.list)  )
-        { drive.values$area.report.list <- append(drive.values$area.report.list, drive.values$event_area$SA2_5DIGIT) }
-        print(isolate(drive.values$area.report.list))
-      })
-      
     })
+    
+#This is the closing braket for the server            
     
 ############################# SNAPSHOTS TAB #################################
     
@@ -1023,8 +997,7 @@ server <- function(input, output) {
     observeEvent(c(input$sb.update,
                    input$load.data), ignoreInit = T, {
         output$age_box <- renderUI({
-            box(plotOutput("age_plot",
-                           height = 200))
+            box(plotOutput("age_plot"), title = "Distribution of Patient Ages")
         })
     })
     output$age_plot <- renderPlot({
@@ -1036,38 +1009,20 @@ server <- function(input, output) {
             theme_minimal()
     })
     
-    # Time since last clinic plot
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$ltf_box <- renderUI({
-                       box(plotOutput("ltf_plot",
-                                      height = 200))
-                     })
-                   })
-    output$ltf_plot <- renderPlot({
-      ggplot(achd.filtered(), aes(x=as.numeric(gap_2000, "years"))) +
-        geom_histogram(fill = "light grey", color = "black") +
-        labs(y = "Number of Patients", 
-             x = "Time since last clinic visit (yrs)") +
-        theme(axis.title.x=element_blank()) +
-        theme_minimal()
-    })
-    
     
     # Sex bar plot
+    
     observeEvent(c(input$sb.update,
                    input$load.data), ignoreInit = T, {
         output$sex_box <- renderUI({
-            plotOutput("sex_plot",
-                       height = 200)
-            
+            box(plotOutput("sex_plot"), title = "Sex of Patients")
         })
     })
     output$sex_plot <- renderPlot ({
         achd.filtered() %>% filter(!is.na(sex)) %>%
             ggplot(aes(x=sex)) +
             geom_bar(fill = "light grey", color = "black") +
-            scale_x_discrete(name = "Sex",
+            scale_x_discrete(name = "",
                              labels=c("1" = "Male", "2" = "Female",
                                       "4" =  "Neither Female or Male")) +
             labs(y = "Number of Patients") +
@@ -1079,8 +1034,7 @@ server <- function(input, output) {
     observeEvent(c(input$sb.update,
                    input$load.data), ignoreInit = T, {
         output$ndx_box <- renderUI({
-            plotOutput("ndx_plot",
-                       height = 200)
+            box(plotOutput("ndx_plot"), title = "Number of CHD Diagnoses per Patient")
         })
     })
     output$ndx_plot <- renderPlot ({
@@ -1098,8 +1052,7 @@ server <- function(input, output) {
     observeEvent(c(input$sb.update,
                    input$load.data), ignoreInit = T, {
         output$nclinic_box <- renderUI({
-            plotOutput("nclinic_plot",
-                       height = 200)
+            box(plotOutput("nclinic_plot"), title = "Number of Clinic Visits per Patient")
         })
     })
     output$nclinic_plot <- renderPlot ({
@@ -1116,22 +1069,20 @@ server <- function(input, output) {
     observeEvent(c(input$sb.update,
                    input$load.data), ignoreInit = T, {
         output$dx_box <- renderUI({
-          div(style = 'overflow-y:scroll;height:500px;',
-              box(plotOutput("dx_plot", height = 1500), 
-                width = 12, height = 1500)
-             )
+            box(plotOutput("dx_plot", height = 750), 
+                title = "Frequency of Each Diagnosis",
+                width = 12, height = 825)
         })
     })
     output$dx_plot <- renderPlot({
         dx.count() %>% filter(dx_count > 0) %>% 
         ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
-            geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
+            geom_bar(stat="identity") +
             theme(axis.text.x = element_text(angle = 90)) +
             labs(title = "Frequecy of each diagnosis", 
                  y = "count",
                  x = "") +
-            coord_flip() +
-            theme_minimal()
+            coord_flip()
     })
     
 
@@ -1149,10 +1100,7 @@ server <- function(input, output) {
         # can happen when deployed).
         
         tempReport <- file.path(tempdir(), "Report.Rmd")
-        tempAreaReport <- file.path(tempdir(), "Area_Report.Rmd")
-        
         file.copy("Report.Rmd", tempReport, overwrite = TRUE)
-        file.copy("Area_Report.Rmd", tempAreaReport, overwrite = TRUE)
         
         rmarkdown::render(tempReport, output_file = file)
         
