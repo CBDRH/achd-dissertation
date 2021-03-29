@@ -444,147 +444,54 @@ seq(0,
 
 ```
 
+fluidRow(valueBoxOutput('pt.count.area', width = 12)), # Patient Count
+                             fluidRow(valueBoxOutput('pt.beth.area', width = 12)), # Breakdown of disease Severity
+                             fluidRow(valueBoxOutput('pt.lft.area', width = 12)), # Number of Patients lost to follow up
+                             fluidRow(valueBoxOutput('pt.irsd.area', width = 12)), # Area disadvantage
+                             fluidRow(valueBoxOutput('pt.remote.area', width = 12)), # Area Remoteness
 
 
-# Plots
-                fluidRow(uiOutput("age_box"),
-                         uiOutput("ltf_box")
-                ),
-                fluidRow(
-                  box(uiOutput("sex_box"), width = 4),
-                  box(uiOutput("ndx_box"), width = 4),
-                  box(uiOutput("nclinic_box"), width = 4)
-                ),
-                fluidRow(
-                  uiOutput("dx_box")
-
-
- #---------------Ploting-----------------------#
-    # Age histogram
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-        output$age_box <- renderUI({
-            box(plotOutput("age_plot",
-                           height = 200))
-        })
-    })
-    
-    output$age_plot <- renderPlot({
-        ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
-            geom_histogram(fill = "light grey", color = "black") +
-            labs(y = "Number of Patients", 
-                 x = "Age (yrs)") +
-            theme(axis.title.x=element_blank()) +
-            theme_minimal()
-    })
-    
-    # Time since last clinic plot
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$ltf_box <- renderUI({
-                       box(plotOutput("ltf_plot",
-                                      height = 200))
-                     })
-                   })
-    output$ltf_plot <- renderPlot({
-      ggplot(achd.filtered(), aes(x=as.numeric(gap_2000, "years"))) +
-        geom_histogram(fill = "light grey", color = "black") +
-        labs(y = "Number of Patients", 
-             x = "Time since last clinic visit (yrs)") +
-        theme(axis.title.x=element_blank()) +
-        theme_minimal()
-    })
-    
-    
-    # Sex bar plot
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-        output$sex_box <- renderUI({
-            plotOutput("sex_plot",
-                       height = 200)
-            
-        })
-    })
-    output$sex_plot <- renderPlot ({
-        achd.filtered() %>% filter(!is.na(sex)) %>%
-            ggplot(aes(x=sex)) +
-            geom_bar(fill = "light grey", color = "black") +
-            scale_x_discrete(name = "Sex",
-                             labels=c("1" = "Male", "2" = "Female",
-                                      "4" =  "Neither Female or Male")) +
-            labs(y = "Number of Patients") +
-            theme(axis.title.x=element_blank()) +
-            theme_minimal()
-    })
-    
-    # Number of Diagnoses
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-        output$ndx_box <- renderUI({
-            plotOutput("ndx_plot",
-                       height = 200)
-        })
-    })
-    output$ndx_plot <- renderPlot ({
-        ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
-            geom_bar(fill = "light grey", color = "black") +
-            scale_x_continuous() +
-            labs(x = "Number of Diagnoses", 
-                 y = "Number of Patients") +
-            theme() +
-            theme_minimal() 
-    })
-    
-    
-    # Number of Clinic Visits
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-        output$nclinic_box <- renderUI({
-            plotOutput("nclinic_plot",
-                       height = 200)
-        })
-    })
-    output$nclinic_plot <- renderPlot ({
-        ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
-            geom_bar(fill = "light grey", color = "black") +
-            scale_x_continuous() +
-            labs(x = "Number of Clinic Visits", 
-                 y = "Number of Patients") +
-            theme() +
-            theme_minimal() 
-    })
-    
-    ### Frequency of Diagnoses
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-        output$dx_box <- renderUI({
-          div(style = 'overflow-y:scroll;height:500px;',
-              box(plotOutput("dx_plot", height = 1500), 
-                width = 12, height = 1500)
-             )
-        })
-    })
-    output$dx_plot <- renderPlot({
-        dx.count() %>% filter(dx_count > 0) %>% 
-        ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
-            geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
-            theme(axis.text.x = element_text(angle = 90)) +
-            labs(title = "Frequecy of each diagnosis", 
-                 y = "count",
-                 x = "") +
-            coord_flip() +
-            theme_minimal()
-    })
-
-
-
-``` {r}
-input = "Tamworth"
-
-list = c()
-
-
-```
-
-
-
+# Number of Patients
+      output$pt.count.area <- renderValueBox({
+        valueBox(drive.values$event_area$ACHD_count,
+                 'ACHD patients', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      # Break Down of Disease Severity
+      output$pt.beth.area <- renderValueBox({
+        valueBox(paste(drive.values$event_area$beth_1, " | ",
+                       drive.values$event_area$beth_2, " | ",
+                       drive.values$event_area$beth_3, 
+                       sep = "  "),
+                 'Simple | Moderate | Severe', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      # Number of Patients Lost to Follow up
+      output$pt.lft.area <- renderValueBox({
+        valueBox(drive.values$event_area$ltf_3,
+                 'Lost to Follow Up', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      # Disadvantage (IRSD)
+      output$pt.irsd.area <- renderValueBox({
+        valueBox(drive.values$event_area$IRSD,
+                 'Level of Disadvantage', 
+                 width = 12, color = 'light-blue')
+      })
+      
+      # Remoteness (ARIA)
+      output$pt.remote.area <- renderValueBox({
+        valueBox(tags$p(
+                    paste(percent(drive.values$event_area$major_cities),
+                       " | ",
+                       percent(drive.values$event_area$inner_regional + drive.values$event_area$outer_regional), 
+                       " | ",
+                       percent(drive.values$event_area$remote + drive.values$event_area$very_remote), 
+                       sep = "  "),
+                    style = "font-size: 75%;"),
+                 'Cities | Regional | Remote', 
+                 width = 12, color = 'light-blue')
+      })

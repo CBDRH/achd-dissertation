@@ -1,0 +1,177 @@
+
+## New ACHD Clinics in NSW
+
+The following clinics were selected as potentials for new locations in NSW
+
+``` {r, echo = FALSE}
+# Table displaying info for new clinics
+drive.values$add_clinic_table %>%
+  # Remove the ID columns
+  select(-ID) %>%
+  # Add Total Column
+  bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
+  #Display the table nicely
+            kbl(align=rep('c', 3), # Centre the data
+      # Nice Column Names
+      col.names = c("New ACHD Clinics",
+                  "Patient within 1hr",
+                  "Lost to F/up within 1hr"),
+      # Table caption
+      caption = "<b>Table 5</b>: Number of patients captured in the new clinics") %>%
+  kable_classic_2(full_width = F, position = "left",
+                  html_font = "Cambria",
+                  font_size = 16)
+
+```
+
+### Average Driving time to ACHD Clinics  
+The map below details the driving time from each SA2 area in NSW to the nearest ACHD Clinic. Driving times are calculated from the centre of each area.
+
+&nbsp;  
+
+``` {r, echo = FALSE, fig.width=13, fig.height=10}
+# Remove NAs from legend
+leg_data_new <- drive.polys()@data %>% filter(!is.na(shortest_time))
+
+# Map showing the driving times to clinics - current and new clinics
+leaflet() %>%
+            addTiles() %>%
+            setView(147.016667, -32.163333, zoom = 5.5) %>%
+            addAwesomeMarkers(
+                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
+                lng = ~Longitude,
+                lat = ~Latitude,
+                label = ~Hospital.name,
+                icon = ~HospitalIcons["Current"]) %>%
+            # Add Polygons
+            addPolygons(
+                data = drive.polys(),
+                layerId = ~CODE16,
+                fillColor = ~current_pal_drive(as.numeric(drive.polys()$shortest_time, 'hours')),
+                weight = 1,
+                opacity = 1,
+                color = "white",
+                dashArray = "3",
+                fillOpacity = 0.7,
+                highlight = highlightOptions(
+                    weight = 3,
+                    color = "#666",
+                    dashArray = "",
+                    fillOpacity = 0.7,
+                    bringToFront = TRUE),
+                label = labels.drive(),
+                labelOptions = labelOptions(
+                    style = list("font-weight" = "normal", padding = "3px 8px"),
+                    textsize = "15px",
+                    direction = "auto")) %>%
+                fitBounds(min(set_coords()$long),
+                          min(set_coords()$lat),
+                          max(set_coords()$long),
+                          max(set_coords()$lat)) %>%
+            # Add Legend
+            addLegend(pal = current_pal_drive, 
+                      values = as.numeric(leg_data$shortest_time, 'hours'), 
+                      opacity = 0.7, 
+                      title = "Driving time (hrs)",
+                      position = "bottomright",
+                      layerId = 'drive.legend')%>%
+            # Add markers for new clinics
+            addAwesomeMarkers(
+                data = htt.details %>% filter(Hospital_ID %in% drive.values$add_clinic_table$ID),
+                lng = ~Longitude,
+                lat = ~Latitude,
+                label = ~Hospital.name,
+                group = "new_markers",
+                icon = ~HospitalIcons["New"])
+
+```
+
+&nbsp;  
+&nbsp; 
+
+``` {r, echo = FALSE, include = FALSE}
+# Table summarising key measures with current clincis only
+clinic.compare.current <- data.frame(
+                        # Number of patients within a 1 hour drive
+                        no_pt = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(no_pt = sum(ACHD_count)),
+                        # Number of patients lost to follow up within a 1 hour drive
+                        ltf_no = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(ltf_no = sum(ltf_3)),
+                        # Average driving time to an ACHD clinic
+                        avg_drive = area.achd %>% summarise(avg_drive = mean(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE)),
+                        # Longest driving time to an ACHD clinic
+                        long_drive = area.achd %>% summarise(long_drive = max(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE))
+                      ) %>% mutate(
+                        hr_p = no_pt / sum(area.achd$ACHD_count), # Percentage of patients within 1 hour
+                        ltf_p = ltf_no / sum(area.achd$ltf_3) # Perc of LTF patients within 1 hour
+                      ) %>%
+                      select(no_pt, hr_p, ltf_no, ltf_p, avg_drive, long_drive) # Put the columns in the right order
+
+# Table summarising key measures with current and new clincis                                                    
+clinic.compare.new <- data.frame(
+                        # Number of patients within a 1 hour drive
+                        no_pt = drive.polys()@data %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(no_pt = sum(ACHD_count)),
+                        # Number of patients lost to follow up within a 1 hour drive
+                        ltf_no = drive.polys()@data %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
+                                                                          summarise(ltf_no = sum(ltf_3)),
+                        # Average driving time to an ACHD clinic
+                        avg_drive = drive.polys()@data %>% summarise(avg_drive = mean(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE)),
+                        # Longest driving time to an ACHD clinic
+                        long_drive = drive.polys()@data %>% summarise(long_drive = max(as.numeric(shortest_time, 'hours'), 
+                                                                             na.rm = TRUE))
+                      ) %>% mutate(
+                        hr_p = no_pt / sum(drive.polys()@data$ACHD_count), # Percentage of patients within 1 hour
+                        ltf_p = ltf_no / sum(drive.polys()@data$ltf_3) # Perc of LTF patients within 1 hour
+                      ) %>%
+                      select(no_pt, hr_p, ltf_no, ltf_p, avg_drive, long_drive) # Put the columns in the right order
+
+# Table summarising the difference between the current clinic and new clinic measures
+diff <- data.frame(
+  no_pt = clinic.compare.new$no_pt - clinic.compare.current$no_pt,
+  hr_p = clinic.compare.new$hr_p - clinic.compare.current$hr_p,
+  ltf_no = clinic.compare.new$ltf_no - clinic.compare.current$ltf_no,
+  ltf_p = clinic.compare.new$ltf_p - clinic.compare.current$ltf_p,
+  avg_drive = clinic.compare.new$avg_drive - clinic.compare.current$avg_drive,
+  long_drive = clinic.compare.new$long_drive - clinic.compare.current$long_drive
+)
+
+# Add all the row together into 1 table
+clinic.compare <- rbind(clinic.compare.current, clinic.compare.new, diff) %>%
+                          mutate(hr_p = percent(hr_p),
+                                 ltf_p = percent(ltf_p)
+                                 )
+
+row.names(clinic.compare) <- c("Current Clincs Locations", "New Clinics Locations", "Difference")
+
+```
+
+
+``` {r, echo = FALSE}
+# Display the table nicely
+clinic.compare %>%
+            kbl(align=rep('c', 6), # Centre the data
+      # Make nice column names
+      col.names = c("No. Patient within 1hr",
+                    "Perc. Patients within 1hr",
+                    "No. Lost to F/up within 1hr",
+                    "Perc. Lost to F/up within 1hr",
+                    "Average Driving to ACHD Clinic",
+                    "Longest Driving time to ACHD Clinic"),
+      # Table caption
+      caption = "<b>Table 6</b>: Comparing the reach of current ACHD clinic locations to
+                                  new ACHD clinic locations") %>%
+  kable_classic_2(full_width = F, position = "left",
+                  html_font = "Cambria",
+                  font_size = 16) %>%
+        column_spec(column = 2, width = "3cm")%>% 
+        column_spec(column = 3, width = "3cm") %>% 
+        column_spec(column = 4, width = "3cm") %>% 
+        column_spec(column = 5, width = "3cm") %>% 
+        column_spec(column = 6, width = "3cm") %>% 
+        column_spec(column = 7, width = "3cm")
+```
