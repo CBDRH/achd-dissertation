@@ -12,6 +12,8 @@ library(here)
 ```
 
 ``` {r, echo = FALSE}
+dir.create(here('analysis_pipeline','output'))
+
 # Run each step of the analysis pipeline
 rmarkdown::render("01_ASGS_Lookup.Rmd")
 rmarkdown::render("02_Hosp_Travel_Time.Rmd")
@@ -22,6 +24,7 @@ rmarkdown::render("05_ACHD_database.Rmd")
 
 ``` {r}
 # Copy the required analysis pipeline outputs into the Shiny App data folder
+dir.create(here('ACHD_Dashboard', 'data'))
 
 # ACHD to EPCC coding index
 file.copy(here("analysis_pipeline", "input", "ACHD_EPCC_coding.csv"),
