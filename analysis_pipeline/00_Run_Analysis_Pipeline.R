@@ -1,28 +1,17 @@
----
-title: "00_Run_Analysis_Pipeline"
-author: "Calum Nicholson"
-date: "03/04/2021"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
 library(here)
-```
 
-``` {r, echo = FALSE}
+# Make a folder for the analysis pipeline output
 dir.create(here('analysis_pipeline','output'))
 
 # Run each step of the analysis pipeline
-rmarkdown::render("01_ASGS_Lookup.Rmd")
-rmarkdown::render("02_Hosp_Travel_Time.Rmd")
-rmarkdown::render("03_SA2_Demographics.Rmd")
-rmarkdown::render("04_ASGS_Boundaries.Rmd")
-rmarkdown::render("05_ACHD_database.Rmd")
-```
 
-``` {r}
+rmarkdown::render(here('analysis_pipeline',"01_ASGS_Lookup.Rmd"))
+rmarkdown::render(here('analysis_pipeline',"02_Hosp_Travel_Time.Rmd"))
+rmarkdown::render(here('analysis_pipeline',"03_SA2_Demographics.Rmd"))
+rmarkdown::render(here('analysis_pipeline',"04_ASGS_Boundaries.Rmd"))
+rmarkdown::render(here('analysis_pipeline',"05_ACHD_database.Rmd"))
+
+
 # Copy the required analysis pipeline outputs into the Shiny App data folder
 dir.create(here('ACHD_Dashboard', 'data'))
 
@@ -58,7 +47,3 @@ file.copy(
   overwrite = FALSE,
   recursive = TRUE
 )
-
-```
-
-
