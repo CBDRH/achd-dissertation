@@ -1,0 +1,99 @@
+---
+title: "02_Hosp_Travel_Time"
+author: "Calum Nicholson"
+date: "03/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+```
+
+
+
+``` {r}
+# Path to the study's data folder (note: accessible from UNSW oneDrive)
+study_folder <- '/Users/calumnicholson/Documents/OneDrive - UNSW/Dissertation/data'
+```
+
+``` {r}
+# load the sa2 lookup data
+asgs_lookup <- read.csv('./output/ASGS_lookup.csv') %>%
+                select(LOCALITY_NAME, POSTCODE, STATE, SA2_NAME, SA2_5DIGIT, GCC_NAME) %>%
+                # Convert postcode to character
+                mutate_at("POSTCODE", as.character) %>%    
+                # Convert suburb name to character
+                mutate_at("LOCALITY_NAME", as.character)  
+```
+
+``` {r}
+# load the hospital deatils dataset
+htt_details <- read.csv('./input/myhospitals-contact-details.csv') %>%
+                    filter(State == "NSW" | State == "ACT" ) %>% # Select only NSW and ACT
+                    # Change all suburbs to uppercase
+                    mutate_at("Suburb", str_to_upper, locale = "en") %>% 
+                    # Convert suburb from to character format
+                    mutate_at("Suburb", as.character) %>%     
+                    # Convert postcode to character format
+                    mutate_at("Postcode", as.character) %>%
+                    # Convert state to character format
+                    mutate_at("State", as.character) %>%
+                    # fixing some of the subrub/postcodes for matching
+                    mutate(
+                       Postcode = replace(Postcode, Suburb == 'CAMPERDOWN', 2006),
+                       Postcode = replace(Postcode, Suburb == 'CONCORD', 2137),
+                       Postcode = replace(Postcode, Suburb == 'GOODOOGA', 2838),
+                       Suburb = replace(Suburb, Hospital.name == 'Illawarra Mental Health Services', 'WOLLONGONG'),
+                       Postcode = replace(Postcode, Suburb == 'MACQUARIE UNIVERSITY', 2113),
+                       Postcode = replace(Postcode, Suburb == 'CHATSWOOD', 2067),
+                    ) %>%
+                    #add ASGS area deatils to each hospital
+                    left_join(asgs_lookup, by = c("Suburb" = "LOCALITY_NAME", 
+                                                   "Postcode" = "POSTCODE",
+                                                   "State" = "STATE"))
+
+```
+
+``` {r}
+# Get sa2 area list
+sa2_areas <- read.csv('./output/ASGS_areas.csv') %>% select(SA2_5DIGIT)
+```
+
+``` {r}
+# Load the hospital travel time data
+htt <- read.csv('./input/duration_sa2_hospitals.csv') %>%
+                rename("SA2_5DIGIT" = SA2_5DIG16) %>%
+                inner_join(sa2_areas, by = 'SA2_5DIGIT') # filter for only NSW/ACT areas
+```
+
+``` {r}
+#filter for only NSw/ACT hospitals
+htt_nsw <- htt
+
+# remove the extra text from columns for easy matching to hospital IDs
+names(htt_nsw) <- gsub("time_to_", "", names(htt_nsw))
+
+#Match column names with hosptial ids to select only hospitals from NSw/ACT
+htt_nsw <- htt_nsw %>% select(SA2_5DIGIT, as.character(htt_details$Hospital_ID))
+```
+
+``` {r}
+# Save the datasets to output
+
+#save as csv and r data file
+write.csv(htt_nsw, "./output/htt_nsw.csv")
+saveRDS(htt_nsw, file = "./output/htt_nsw.rds")
+
+#save as csv and r data file
+write.csv(htt_details, "./output/htt_details.csv")
+saveRDS(htt_details, file = "./output/htt_details.rds")
+
+
+```
+
+
+
+
+

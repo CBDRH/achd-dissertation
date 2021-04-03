@@ -1,0 +1,436 @@
+---
+title: "03_SA2_Demographics"
+author: "Calum Nicholson"
+date: "03/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(lubridate)
+```
+
+## Function For importing Table Builder data 
+
+Table Builder data was downloaded on 5 Jun 2020. The data is located in Dissertation/data/Table_builder_SA2_NSW.
+
+Each table row in this folder is an SA2 area for NSW, with the columns describing a certain demographic. This function will import the data and remove the unneccesary rows.
+
+
+``` {r}
+# Function to import and clean SA2 Tables
+read.SA2.table <-function (filename, path = "./input/Table_builder_SA2/") {
+  
+#    ```
+#    Takes an table downloaded from Table Builder at the SA2 levels, containing all NSW SA2 #    areas, and converts it to a dataframe
+#    
+#    INPUT
+#    filename:       string, name of the file with extension
+#    path:           string, path to the file
+#    
+#    OUTPUT
+#    sa2.df:         dataframe, Table builder data with excess removed
+#    ```
+  
+    #load table
+    table <- readLines(paste(path,filename, sep=''))
+    
+    #tidy the data
+    table <- table[-(1:9)] #remove header
+    table <- table[-2] #remove SA2 label
+    
+    #load data into dataframe
+    sa2.df <- read.table(text = table, sep =",", header = TRUE, stringsAsFactors = FALSE, fill = TRUE)
+    
+    sa2.df <- head(sa2.df, -4) %>% #remove footer
+              select(-X)
+    
+    #convert all columns except header into numeric
+    sa2.df[-1] <- lapply(sa2.df[-1], as.numeric)
+    
+    sa2.df
+}
+
+head(read.SA2.table('age_10P.csv'))
+     
+```
+
+## Creating Area level variables
+
+Going though each of the tables, adding variables into a final dataset, sa2.data.
+
+__total population, sex and country of birth__
+``` {r}
+
+# load some tables
+sex <- read.SA2.table('sex.csv')
+COB <- read.SA2.table('COB.csv')
+
+# SA2 area names
+SA2_NAME <- sex$SEXP.Sex
+
+# Total population in each area
+total_pop <- sex$Total
+
+# Percentages in each area
+male <- ( sex$Male / total_pop ) * 100
+female <- ( sex$Female / total_pop ) * 100
+overseas <- ( COB$COB_overseas / total_pop ) * 100
+
+# combine variables
+sa2.data <- data.frame(SA2_NAME, total_pop, male, female, overseas)
+head(sa2.data)
+
+```
+__childcare__
+``` {r}
+# load data
+childcare_cat <- read.SA2.table('child_care.csv')
+
+# percentage of population engaged in childcare
+childcare <-  childcare_cat %>%
+                mutate(sum = rowSums(.[3:5])) %>%
+                mutate(perc = sum / Total * 100) %>%
+                select(CHCAREP.Unpaid.Child.Care, perc)
+
+# update column names
+names(childcare) <- c('SA2_NAME','childcare')
+
+# add to data set
+sa2.data2 <- left_join(sa2.data, childcare, by = 'SA2_NAME')
+
+``` 
+
+__employment__
+``` {r}
+# load data
+employ_cat <- read.SA2.table('employment_status.csv')
+
+# percentage of unemployed in each area
+employ <- employ_cat %>%
+              mutate(sum = rowSums(.[5:6])) %>%
+              mutate(perc = sum / Total * 100) %>%
+              select(LFSP.Labour.Force.Status, perc)
+
+# update column names
+names(employ) <- c('SA2_NAME','employ')
+
+# add to data set
+sa2.data3 <- left_join(sa2.data2, employ, by = 'SA2_NAME')
+
+``` 
+
+__overcrowding__
+``` {r}
+# load data
+overcrowding_cat <- read.SA2.table('overcrowding.csv')
+
+# Overcrowding measured by number of spare rooms, or number of rooms needed in household
+# Percentage who have spare rooms (positive), and percentage who need more rooms (negative)
+overcrowding <- overcrowding_cat %>%
+              mutate(positive = rowSums(.[7:10])) %>%
+              mutate(negative = rowSums(.[2:5])) %>%
+              mutate(perc_pos = positive / Total * 100) %>%
+              mutate(perc_neg = negative / Total * 100) %>%
+              select(HOSD.Housing.Suitability, perc_pos, perc_neg)
+
+# update column names
+names(overcrowding) <- c('SA2_NAME','oc_positive', 'oc_negative')
+
+# add to data set
+sa2.data4 <- left_join(sa2.data3, overcrowding, by = 'SA2_NAME')
+
+```
+
+__single parents__
+``` {r}
+# load data
+single_parent_cat <- read.SA2.table('single_parent.csv')
+
+#Percentage of single parent households; male, female and total
+single_parent <- single_parent_cat %>%
+              mutate(sp_male = Male.lone.parent / Total * 100) %>%
+              mutate(sp_female = Female.lone.parent / Total * 100) %>%
+              mutate(sp_total = sp_male + sp_female) %>%  
+              select(SLPP.Sex.of.Lone.Parent, sp_male, sp_female, sp_total)
+
+# update column names
+names(single_parent) <- c('SA2_NAME','sp_male','sp_female','sp_total')
+
+# add to data set
+sa2.data5 <- left_join(sa2.data4, single_parent, by = 'SA2_NAME')
+```
+
+__students__
+``` {r}
+# load data
+student_cat <- read.SA2.table('student_status.csv')
+
+# percentage of students in each area
+student <- student_cat %>%
+              mutate(student_sum = rowSums(.[3:4])) %>%
+              mutate(student_perc = student_sum / Total * 100) %>% 
+              select(STUP.Full.Time.Part.Time.Student.Status, student_perc)
+
+# update column names
+names(student) <- c('SA2_NAME','student')
+
+# add to data set
+sa2.data6 <- left_join(sa2.data5, student, by = 'SA2_NAME')
+
+
+```
+
+__age__
+``` {r}
+# load data
+#add age groups for each area
+age_cat <- read.SA2.table('age_10P.csv')
+
+# age categories, in 10 year age groups.
+age_cat <- select(age_cat, AGE10P...Age.in.Ten.Year.Groups:X100.years.and.over)
+
+# update column names
+names(age_cat) <- c('SA2_NAME','age0','age10',
+                    'age20','age30','age40',
+                    'age50','age60','age70',
+                    'age80','age90','age100')
+
+# add to data set
+sa2.data7 <- left_join(sa2.data6, age_cat, by = 'SA2_NAME')
+
+```
+
+__household income__
+This data will be simplified into a single column, % of households under the median weekly income. Median weekly income for 2016 census is $1,438 (https://quickstats.censusdata.abs.gov.au/census_services/getproduct/census/2016/quickstat/036)
+
+``` {r}
+# load data
+house_inc <- read.SA2.table('SA2_HIED.csv')
+
+#summarise data
+house_inc_sum <- house_inc %>%
+                    mutate(below_median_inc = (
+                              Nil.income + X.1..149...1..7.799. + X.150..299...7.800..15.599. +
+                             X.300..399...15.600..20.799. + X.400..499...20.800....25.999. + X.500..649...26.000..33.799. +
+                             X.650..799...33.800..41.599. + X.800..999...41.600..51.999. + X.1.000..1.249...52.000..64.999.) /
+                              Total) %>%
+                    rename("SA2_NAME" = HIED.Equivalised.Total.Household.Income..weekly.) %>%
+                    select(SA2_NAME, below_median_inc)
+
+# add to data set
+sa2.data8 <- left_join(sa2.data7, house_inc_sum, by = 'SA2_NAME')
+
+```
+
+__rent__
+This data will be simplified into a single column, % of households paying above the median weekly rent. Median weekly rent for 2016 censis is $335
+``` {r}
+# load data
+rent <- read.SA2.table('SA2_rent.csv')
+
+#summarise data
+rent_sum <- rent %>%
+              mutate(above_median_rent = ( X.375..399 + X.400..424 + X.425..449 + X.450..549 +
+                                         X.550..649 + X.650..749 + X.750..849 + X.850..949 +
+                                         X.950.and.over ) / Total) %>%
+                    rename("SA2_NAME" = RNTRD.Rent..weekly..Ranges) %>%
+                    select(SA2_NAME, above_median_rent)
+
+# add to data set
+sa2.data9 <- left_join(sa2.data8, rent_sum, by = 'SA2_NAME')
+```
+
+__high school completion__
+percentage of population completed high school (year 12 or equivalent)
+``` {r}
+# load data
+HSCP <- read.SA2.table('HSCP.csv')
+
+#summarise data
+HSCP <- HSCP %>%
+              mutate(yr12_perc = Year.12.or.equivalent / Total) %>%
+                    rename("SA2_NAME" = HSCP.Highest.Year.of.School.Completed) %>%
+                    select(SA2_NAME, yr12_perc)
+
+# add to data set
+sa2.data10 <- left_join(sa2.data9, HSCP, by = 'SA2_NAME')
+```
+
+__bachelor completion__
+percantage of population completed bachelors degree
+``` {r}
+# load data
+HEAP <- read.SA2.table('HEAP.csv')
+
+#summarise data
+HEAP <- HEAP %>%
+              mutate(bach_perc = ( Postgraduate.Degree.Level + Graduate.Diploma.and.Graduate.Certificate.Level + 
+                                 Bachelor.Degree.Level ) / Total) %>%
+                    rename("SA2_NAME" = HEAP...1.Digit.Level) %>%
+                    select(SA2_NAME, bach_perc)
+
+# add to data set
+sa2.data11 <- left_join(sa2.data10, HEAP, by = 'SA2_NAME')
+```
+
+__Disadvantage__
+``` {r}
+irsd <- read.SA2.table('seifa_irsd.csv')
+
+irsd_cat <- irsd %>% 
+                # Select area name and dummy variables only
+                select(starts_with('Decile'),IRSD.Deciles.at.SA2.Level..Area.) %>%
+                # Gather all the dummy variables into a single column
+                gather(type, value, -IRSD.Deciles.at.SA2.Level..Area.) %>%
+                # Filter for correct IRSD category for each SA2 area
+                filter(value > 0) %>%
+                # Remove the population count, leaving only the IRSD category
+                select(-value) %>%
+                # Renames the columns
+                rename('SA2_NAME' = IRSD.Deciles.at.SA2.Level..Area.,
+                       'IRSD' = type) %>%
+                # Remove the 'Total' row
+                filter(SA2_NAME != 'Total')
+
+# Make the IRSD values a factors from 1 - 10
+irsd_cat$IRSD <- gsub("Decile.", "", irsd_cat$IRSD)
+irsd_cat$IRSD <- as.factor(irsd_cat$IRSD)
+
+# Join to area dataset
+sa2.data12 <- left_join(sa2.data11, irsd_cat, by = 'SA2_NAME')
+
+```
+
+
+__Advantage and Disadvantage__
+``` {r}
+irsad <- read.SA2.table('seifa_irsad.csv')
+
+irsad_cat <- irsad %>% select(starts_with('Decile'),IRSAD.Deciles.at.SA2.Level..Area.) %>%
+                gather(type, value, -IRSAD.Deciles.at.SA2.Level..Area.) %>%
+                filter(value > 0) %>%
+                select(-value) %>%
+                rename('SA2_NAME' = IRSAD.Deciles.at.SA2.Level..Area.,
+                       'IRSAD' = type) %>%
+                filter(SA2_NAME != 'Total')
+
+irsad_cat$IRSAD <- gsub("Decile.", "", irsad_cat$IRSAD)
+irsad_cat$IRSAD <- as.factor(irsad_cat$IRSAD)
+
+sa2.data13 <- left_join(sa2.data12, irsad_cat, by = 'SA2_NAME')
+
+```
+
+__Remoteness__
+``` {r}
+remote <- read.SA2.table('remoteness.csv') %>%
+                mutate(major_cities = Major.Cities.of.Australia..NSW. + Major.Cities.of.Australia..ACT.,
+                       inner_regional = Inner.Regional.Australia..NSW. + Inner.Regional.Australia..ACT.) %>%
+                rename("outer_regional" = Outer.Regional.Australia..NSW.,
+                       "remote" = Remote.Australia..NSW.,
+                       "very_remote" = Very.Remote.Australia..NSW.,
+                       "SA2_NAME" = RA)%>%
+                select(SA2_NAME, major_cities, inner_regional, outer_regional, remote, very_remote, Total)
+
+remote_perc <- remote %>%
+                mutate(major_cities = major_cities / Total,
+                       inner_regional = inner_regional / Total,
+                       outer_regional = outer_regional / Total,
+                       remote = remote / Total,
+                       very_remote = very_remote / Total) %>%
+                select(SA2_NAME, major_cities, inner_regional, outer_regional, remote, very_remote)
+
+sa2.data14 <- left_join(sa2.data13, remote_perc, by = 'SA2_NAME')
+
+
+```
+
+``` {r}
+library(ggplot2)
+library(scales)
+
+sa2 = "Total"
+
+datalong <- remote_perc %>% filter(SA2_NAME == sa2) %>%
+                pivot_longer(cols = major_cities:very_remote, names_to = "remoteness")
+
+datalong$remoteness <- factor(datalong$remoteness, levels = datalong$remoteness)
+
+ggplot(data = datalong, aes(x = factor(remoteness), y = value)) +
+  geom_col() +
+  scale_y_continuous(limits = c(0,1), labels = percent)
+
+
+
+```
+
+__Add SA Codes to dataset__
+``` {r}
+# Load the list of ASGS SA2 area names and codes
+SA2_areas <- read.csv('./output/ASGS_areas.csv') %>%
+                  select(SA2_NAME, SA2_5DIGIT, GCC_NAME)
+
+# Add the SA2 area codes to the new dataset
+sa2.data15 <- left_join(sa2.data14, SA2_areas, by = 'SA2_NAME')
+
+```
+
+__Hospital Travel Time Data__
+
+This data contains the distance between each SA2 area in australia and each hospital in australia. This obviously contains much more data than we need, so we can filter it to look at only SA2 areas in NSW and NSW hospitals with an ACHD service.
+
+``` {r}
+# import the hospital travel times data
+
+htt <- readRDS(file = "./output/htt_nsw.rds") %>%
+#         ------------Clean up the data-------------------------  
+          # select columns, sa2 code and ACHD locations          
+          select(SA2_5DIGIT, `646`, `755`, `152`, `683`, `737`, `979`)%>%
+          # rename locations to something understandable
+          dplyr::rename(
+                 "time_to_orange" = `646`,
+                 "time_to_nowra" = `755`,
+                 "time_to_canberra" = `152`,
+                 "time_to_port" = `683`,
+                 "time_to_rpa" = `737`,
+                 "time_to_westmead" = `979`) %>%
+          # calculate the shortest travel time to an achd clinic
+          mutate(shortest_time = pmin(time_to_orange,time_to_nowra,time_to_canberra,
+                                     time_to_port,time_to_rpa,time_to_westmead))
+
+```
+
+``` {r}
+#merge the travel time data with the area level dataset
+sa2.data16 <- left_join(sa2.data15, htt, by = 'SA2_5DIGIT') %>%
+             # Convert the numeric data to duration data (in seconds)
+             mutate(time_to_orange = duration(time_to_orange, "seconds"),
+                    time_to_nowra = duration(time_to_nowra, "seconds"),
+                    time_to_canberra = duration(time_to_canberra, "seconds"),
+                    time_to_port = duration(time_to_port, "seconds"),
+                    time_to_rpa = duration(time_to_rpa, "seconds"),
+                    time_to_westmead = duration(time_to_westmead, "seconds"),
+                    shortest_time = duration(shortest_time, "seconds"))
+```
+
+
+``` {r}
+# Final table
+knitr::kable(head(sa2.data16))
+
+#save as csv and r data file
+write.csv(sa2.data16, "./output/sa2_demographics.csv")
+saveRDS(sa2.data16, file = "./output/sa2_demographics.rds")
+
+```
+
+
+
+
+
+
+
+

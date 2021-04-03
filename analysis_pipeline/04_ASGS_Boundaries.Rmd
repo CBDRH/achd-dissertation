@@ -1,0 +1,102 @@
+---
+title: "04_ASGS_Boundaries"
+author: "Calum Nicholson"
+date: "03/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(rgdal)
+library(sp)
+library(sf)
+```
+
+``` {r}
+#import polygon boundaries
+sa2.polys <- readOGR('./input/ASGS/sa2/SA2_2016_AUST.shp')
+sa3.polys <- readOGR('./input/ASGS/sa3/SA3_2016_AUST.shp')
+sa4.polys <- readOGR('./input/ASGS/sa4/SA4_2016_AUST.shp')
+``` 
+
+``` {r}
+# Fuction to prepare shape data
+prep.SA.data <- function (shapefile, smoothing, area_type) {
+  #    ```
+  #    Takes an ASGS .shp shapefile (SA2,SA3,SA4 only) and prepares it for use in the Clinic Planning too
+  #    
+  #    INPUT
+  #    shapefile:      .shp shape file of ASGS area boundaries
+  #    smoothing:      a numeric value to set the level of smoothing that will be placed on the shapes
+  #    area_type:      string denoting the area type, either 'sa_2', 'sa_3' or 'sa_4'
+  #    
+  #    OUTPUT
+  #    simple_shapes:  A simplified version of the ASGS boundaries, with only NSW and ACT and some smoothing applied
+  #    ```
+  
+  
+  #Select only NSW and ACT shapes and simply the boundaries
+  NSW_shapes <- subset(shapefile, shapefile$GCC_NAME16 %in% 
+                     c("Rest of NSW", "Greater Sydney", "Australian Capital Territory"))
+  simple_shapes <- rgeos::gSimplify(NSW_shapes, tol = smoothing, topologyPreserve=TRUE)
+  
+  simple_shapes$GCC_NAME16 <- NSW_shapes$GCC_NAME16
+  
+  if (area_type == 'sa2') {
+        # Add the SA2 code and name to the simplified shapefile
+        simple_shapes$SA2_5DIG16 <- NSW_shapes$SA2_5DIG16
+        simple_shapes$SA2_NAME16 <- NSW_shapes$SA2_NAME16
+        # Make the column names generic (to help with the reactive functions in shiny)
+        simple_shapes@data <- simple_shapes@data %>%
+                                  rename("CODE16" = SA2_5DIG16,
+                                         "NAME16" = SA2_NAME16)
+  
+  } else if (area_type == 'sa3') {
+        # Add the SA3 code and name to the simplified shapefile
+        simple_shapes$SA3_CODE16 <- NSW_shapes$SA3_CODE16
+        simple_shapes$SA3_NAME16 <- NSW_shapes$SA3_NAME16
+        # Make the column names generic (to help with the reactive functions in shiny)
+        simple_shapes@data <- simple_shapes@data %>%
+                                  rename("CODE16" = SA3_CODE16,
+                                         "NAME16" = SA3_NAME16)
+  
+  } else if (area_type == 'sa4') {
+        # Add the SA4 code and name to the simplified shapefile
+        simple_shapes$SA4_CODE16 <- NSW_shapes$SA4_CODE16
+        simple_shapes$SA4_NAME16 <- NSW_shapes$SA4_NAME16
+        simple_shapes@data <- simple_shapes@data %>%
+                                  rename("CODE16" = SA4_CODE16,
+                                         "NAME16" = SA4_NAME16)
+        
+  } else { print('provide area type sa2, sa3, sa4 only') }
+  
+  simple_shapes
+}
+```
+
+
+``` {r}
+# prepare the shape files
+sa2.shapes <- prep.SA.data(sa2.polys, 0.01, 'sa2') %>% subset(!(.$NAME16 %in% "Lord Howe Island") )
+sa3.shapes <- prep.SA.data(sa3.polys, 0.01, 'sa3')
+sa4.shapes <- prep.SA.data(sa4.polys, 0.01, 'sa4')
+```
+
+``` {r}
+#Create directory in output folder to store shape files
+dir.create('./output/ASGS')
+dir.create('./output/ASGS/sa2')
+dir.create('./output/ASGS/sa3')
+dir.create('./output/ASGS/sa4')
+
+#save the files
+writeOGR(sa2.shapes, layer = 'sa2_polys', dsn = './output/ASGS/sa2', driver="ESRI Shapefile")
+writeOGR(sa3.shapes, layer = 'sa3_polys', dsn = './output/ASGS/sa3', driver="ESRI Shapefile")
+writeOGR(sa4.shapes, layer = 'sa4_polys', dsn = './output/ASGS/sa4', driver="ESRI Shapefile")
+```
+
+
+
+
+

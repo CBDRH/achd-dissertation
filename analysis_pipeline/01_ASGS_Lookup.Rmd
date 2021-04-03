@@ -1,22 +1,14 @@
 ---
-title: "SA2 Lookup Table"
+title: "01_ASGS_Lookup"
 author: "Calum Nicholson"
-date: "08/06/2020"
+date: "03/04/2021"
 output: html_document
 ---
 
 ```{r setup, include=FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-# set 'data' folder as root directory
-knitr::opts_knit$set(root.dir = '..')
 
 library(dplyr)
-
-# Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'C:/Users/calum.nicholson/r-projects/achd-data'
-
-# Path to the study's data folder (note: accessible from UNSw oneDrive)
-study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
 ```
 
 ## The SA2 Coding index 
@@ -24,7 +16,7 @@ study_folder <- 'C:/Users/calum.nicholson/OneDrive - UNSW/Dissertation/data'
 Allows SA2 areas to be looked up using with locality (suburb), Postcode and State.
 ``` {r}
 # Import SA2 coding index
-SA2_locality <- read.csv(paste(study_folder, '/ASGS/asgs2016codingindexes/2019 Locality to 2016 SA2 Coding Index.csv', sep = ""))
+SA2_locality <- read.csv('./input/2019 Locality to 2016 SA2 Coding Index.csv')
 
 # filter for NSW
 SA2_locality_NSW <- SA2_locality %>%
@@ -39,19 +31,19 @@ SA2_locality_names <- SA2_locality_NSW %>%
 
 ``` {r}
 # Load the list of ASGS SA2 area names and codes
-SA2_aus <- read.csv(paste(study_folder,'/ASGS/SA2_2016_AUST.csv', sep="")) %>%
+ASGS_aus <- read.csv('./input/SA2_2016_AUST.csv') %>%
             select(STATE_NAME_2016, SA2_MAINCODE_2016, SA2_5DIGITCODE_2016, SA2_NAME_2016,
                    SA3_CODE_2016, SA3_NAME_2016, SA4_CODE_2016, SA4_NAME_2016, GCCSA_NAME_2016)
 
 # filter for NSW and select the column with SA2 names
-SA2_nsw <- SA2_aus %>%
+ASGS_NSW_ACT <- ASGS_aus %>%
             filter(STATE_NAME_2016 == "New South Wales" | STATE_NAME_2016 == "Australian Capital Territory")
 ```
 
 
 ``` {r}
 #Get missing records
-missing.records <- anti_join(SA2_nsw, SA2_locality_names, by = c("SA2_NAME_2016" = "SA2_NAME"))
+missing.records <- anti_join(ASGS_NSW_ACT, SA2_locality_names, by = c("SA2_NAME_2016" = "SA2_NAME"))
 
 missing.records
 ```
@@ -65,7 +57,7 @@ This method may mean that some SA2 areas have been excluded because the locality
 
 ``` {r}
 # join the SA3, SA4 and GCC area codes to the look up table
-ASGS_lookup <- left_join(SA2_locality_NSW, SA2_aus, by = c("SA2_MAINCODE" = "SA2_MAINCODE_2016")) %>%
+ASGS_lookup <- left_join(SA2_locality_NSW, ASGS_aus, by = c("SA2_MAINCODE" = "SA2_MAINCODE_2016")) %>%
                     select(-LOCALITY_ID, -LOCALITY_TYPE, -STATE_NAME_2016, -SA2_NAME_2016) %>%
                     rename("GCC_NAME" = GCCSA_NAME_2016,
                            "SA2_5DIGIT" = SA2_5DIGITCODE_2016,
@@ -83,13 +75,24 @@ ASGS_lookup %>% filter(is.na(POSTCODE))
 ```
 
 ``` {r}
-# Select Nessecary columns from lookup table
-SA2_lookup_NSW <- SA2_locality_NSW %>%
-                   select(LOCALITY_NAME, POSTCODE, SA2_MAINCODE, SA2_NAME)
+# Better select relevant columns and choose better column names
+ASGS_NSW_ACT <- ASGS_NSW_ACT %>%
+                select(-STATE_NAME_2016, -SA2_MAINCODE_2016) %>%
+                    rename("GCC_NAME" = GCCSA_NAME_2016,
+                           "SA2_NAME" = SA2_NAME_2016,
+                           "SA2_5DIGIT" = SA2_5DIGITCODE_2016,
+                           "SA3_CODE" = SA3_CODE_2016,
+                           "SA3_NAME" = SA3_NAME_2016,
+                           "SA4_CODE" = SA4_CODE_2016,
+                           "SA4_NAME" = SA4_NAME_2016)
 
+
+```
+
+``` {r}
 # write the filtered lookup table to the output folder
- write.csv(SA2_lookup_NSW, "./analysis_pipeline/output/sa2_lookup.csv")
- write.csv(ASGS_lookup, "./analysis_pipeline/output/ASGS_lookup.csv")
+ write.csv(ASGS_NSW_ACT, "./output/ASGS_areas.csv")
+ write.csv(ASGS_lookup, "./output/ASGS_lookup.csv")
 
 ```
 

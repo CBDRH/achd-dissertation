@@ -1,0 +1,61 @@
+---
+title: "00_Run_Analysis_Pipeline"
+author: "Calum Nicholson"
+date: "03/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(here)
+```
+
+``` {r, echo = FALSE}
+# Run each step of the analysis pipeline
+rmarkdown::render("01_ASGS_Lookup.Rmd")
+rmarkdown::render("02_Hosp_Travel_Time.Rmd")
+rmarkdown::render("03_SA2_Demographics.Rmd")
+rmarkdown::render("04_ASGS_Boundaries.Rmd")
+rmarkdown::render("05_ACHD_database.Rmd")
+```
+
+``` {r}
+# Copy the required analysis pipeline outputs into the Shiny App data folder
+
+# ACHD to EPCC coding index
+file.copy(here("analysis_pipeline", "input", "ACHD_EPCC_coding.csv"),
+          here("ACHD_Dashboard", "data", "ACHD_EPCC_coding.csv"),
+          overwrite = FALSE
+)
+
+# SA2 area demographics
+file.copy(here("analysis_pipeline", "output", "sa2_demographics.rds"),
+          here("ACHD_Dashboard", "data", "sa2_demographics.rds"),
+          overwrite = FALSE
+)
+
+# Driving time to hospitals
+file.copy(here("analysis_pipeline", "output", "htt_nsw.rds"),
+          here("ACHD_Dashboard", "data", "htt_nsw.rds"),
+          overwrite = FALSE
+)
+
+# Hospital Metadata
+file.copy(here("analysis_pipeline", "output", "htt_details.rds"),
+          here("ACHD_Dashboard", "data", "htt_details.rds"),
+          overwrite = FALSE
+)
+
+# Copy the shape files
+dir.create(here("ACHD_Dashboard", "data", "ASGS"))
+file.copy(
+  here("analysis_pipeline", "output", "ASGS"),
+  here("ACHD_Dashboard", "data"),
+  overwrite = FALSE,
+  recursive = TRUE
+)
+
+```
+
+
