@@ -71,9 +71,9 @@ achd.area <- prepare.area.data(achd) %>%
 ``` {r}
 #write the area achd dataset to a csv file and an R data file
 
-saveRDS(achd.area, file = here("analysis_pipeline", "input", "area.achd.rds"))
+saveRDS(achd.area, file = here("analysis_pipeline", "input", "area_achd.rds"))
 
-write.csv(achd.area, here("analysis_pipeline", "input", "area.achd.csv"))
+write.csv(achd.area, here("analysis_pipeline", "input", "area_achd.csv"))
 ```
 
 
