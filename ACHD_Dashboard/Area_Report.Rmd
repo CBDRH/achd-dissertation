@@ -1,16 +1,17 @@
+&nbsp;  
+&nbsp;  
+&nbsp; 
+
+## Area Focus 
 
 ``` {r, echo = FALSE}
-# Data for the selected area
-selected_area <- drive.values$area_data %>% filter(SA2_5DIGIT == {{i}})
+# Data for the selected areas
+selected_areas <- drive.values$area_data %>% filter(SA2_5DIGIT %in% {{i}})
 ```
-
-## Area Focus: `r selected_area$sa2_area` 
-
-&nbsp; 
 
 <div style= "float:right;
              position: relative;
-             left: -220px;
+             left: -150px;
              ">
 ``` {r, echo = FALSE}
 # Map highlighting the selected area
@@ -18,37 +19,18 @@ leaflet() %>%
             addTiles() %>%
             # Add Polygons
             addPolygons(
-                data = subset(drive.polys(), drive.polys()$NAME16 == selected_area$SA2_NAME),
+                data = subset(drive.polys(), drive.polys()$NAME16 %in% selected_areas$SA2_NAME),
                 color = 'black',
-                fill = 'white')
+                fill = 'white',
+                weight = 1)
 ```
-</div>
 
-
-<div style= "line-height: 2.5;
-             font-size: 15px;">
-Number of ACHD Patients: `r selected_area$ACHD_count`  
-Number with: Simple CHD: `r selected_area$beth_1` | Moderate CHD: `r selected_area$beth_2` | Complex CHD: `r selected_area$beth_3`  
-Number of Patients lost to follow up: `r selected_area$ltf_3`  
-Index of Relative Socio-economic Disadvantage (IRSD): `r selected_area$IRSD`  
-Accessibility and Remoteness Index of Australia (percentage of population living in):  
-
-* Major Cities: `r percent(selected_area$major_cities)`  
-* Inner Regional: `r percent(selected_area$inner_regional)`  
-* Outer Regional: `r percent(selected_area$outer_regional)`  
-* Remote: `r percent(selected_area$remote)`  
-* Very Remote: `r percent(selected_area$very_remote)`  
-
-Driving time to nearest clinic:  
-
-* Current Clinic Locations: `r round(as.numeric(area.achd$shortest_time[area.achd$sa2_area == selected_area$sa2_area], 'hours'), digits = 2)` hours
-* With New Clinics Added: `r round(as.numeric(selected_area$shortest_time, 'hours'), digits = 2)` hours
-
-</div>
-
-``` {r, echo = FALSE, fig.width = 10}
+``` {r, echo = FALSE, fig.width = 7}
 # Data of diagnoses present in area
-dx.area.data <- selected_area %>% select(dx_codes$EPCC_Code) %>% 
+dx.area.data <- selected_areas %>% select(dx_codes$EPCC_Code) %>% 
+                            mutate_all(as.character) %>%
+                            mutate_all(as.numeric) %>%
+                            summarise_all(sum, na.rm = TRUE) %>%
                             t() %>% as.data.frame() %>%
                             rename("dx_count" = V1) %>% 
                             mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)]) %>%
@@ -64,5 +46,66 @@ ggplot(data = dx.area.data, aes(x = reorder(dx_label, dx_count), y=dx_count)) +
                    x = "") +
               coord_flip()
 ```
+</div>
 
+<div style= "font-size: 15px;">
+``` {r, echo = FALSE}
+HTML(paste(
+            "
+            <br><br>
+            <b>Selected Areas:</b> ", paste(selected_areas$SA2_NAME, collapse = ', '), "<br>
+            <br>
+            <b>Number of ACHD Patients:</b> ", sum(selected_areas$ACHD_count),"<br>
+            <br>
+            <b>Number with:</b> <br>
+            <ul>
+              <li>Simple CHD: ",sum(selected_areas$beth_1),"</li>
+              <li>Moderate CHD: ",sum(selected_areas$beth_2),"</li> 
+              <li>Complex CHD: ",sum(selected_areas$beth_3),"</li>
+            </ul>
+            <b>Number of Patients lost to follow up:</b><br> 
+            <ul>
+              <li>",sum(selected_areas$ltf_3),"</li>
+            </ul>
+            <b>Index of Relative Socio-economic Disadvantage</b><br>
+              (1 = most disadvantaged, 10 = least disadvantaged): <br>
+              <ul>",
+              paste("<li>", selected_areas$SA2_NAME, ": ", 
+                    selected_areas$IRSD, "</li>", collapse = ""),
+            "</ul>
+            <b>Aboriginal and Torres Strait Islander Population</b><br>
+            <ul>
+                <li>Total: ",sum(selected_areas$atsi),"</li>
+                <li>Percent: ",percent(sum(selected_areas$atsi) / 
+                                       sum(selected_areas$total_pop)),"</li>
+            </ul>
+            <b>Accessibility and Remoteness Index of Australia</b><br>
+            (percentage of population living in):<br>  
+            <ul>
+                <li>Major Cities: ",percent(sum(selected_areas$major_cities) / 
+                                    length(selected_areas$SA2_NAME)),"</li>
+                <li>Inner Regional:",percent(sum(selected_areas$inner_regional) / 
+                                     length(selected_areas$SA2_NAME)),"</li>
+                <li>Outer Regional:",percent(sum(selected_areas$outer_regional) / 
+                                     length(selected_areas$SA2_NAME)),"</li> 
+                <li>Remote:",percent(sum(selected_areas$remote) / 
+                             length(selected_areas$SA2_NAME)),"</li>
+                <li>Very Remote:",percent(sum(selected_areas$very_remote) / 
+                                  length(selected_areas$SA2_NAME)),"</li>
+            </ul>
+            <b>Driving time to nearest clinic:</b><br> 
+            <ul>",
+                 paste("<li>",selected_areas$SA2_NAME,":</li>  
+                 <ul>
+                    <li>Current Locations: ", 
+                    round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% {{i}}], 'hours'), 
+                    digits = 2)," hrs</li>
+                    <li>New Locations: ", 
+                    round(as.numeric(selected_areas$shortest_time, 'hours'), digits = 2)," hrs</li>
+                 </ul>", collapse = ""),   
+            "</ul>
+            ")
+            )
+```
+</div>
 

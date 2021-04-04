@@ -544,21 +544,19 @@ if ( length(drive.values$add_clinic_table$Hospital) != 0 ) {
     }
 ```
 
-&nbsp;  
-&nbsp;  
-&nbsp; 
+
  
 ``` {r, echo = FALSE, results = 'asis'}
-
 # If the user has added areas to the report
 if ( !is.null(drive.values$area.report.list) ) {
-        # apply the area report template for each area
+     out = NULL
+     
+     # apply the area report template for each area
         src <- lapply(drive.values$area.report.list,
                       function(i) knit_expand('Area_Report.Rmd'))
         # render the area reports
         cat(knit(text = src,
                  quiet = TRUE))
+        
   }
-
-
 ```

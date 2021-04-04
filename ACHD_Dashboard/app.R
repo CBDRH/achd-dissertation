@@ -68,6 +68,7 @@ sidebar <- dashboardSidebar(
         menuItem("Clinic Planning", tabName = "driving", icon = icon("map-marker-alt")),
         
         # Report Download Button
+        h4("Download Report"),
         downloadButton("report.dl", "Download", icon=icon("download")),
         tags$head(tags$style(".dl_butt{color:blue;}")),
         
@@ -342,9 +343,9 @@ body <- dashboardBody(
                 fluidRow(box(leafletOutput('drive.map', height = 550),
                              width = 8, height = 580),
                          column(width = 4,
-                             fluidRow(valueBoxOutput('dr.area.name', width = 12)), # Area name
-                             fluidRow(uiOutput('area.report'), width = 12),
-                             fluidRow(uiOutput('area.output'), width = 12),
+                             fluidRow(uiOutput('area.output'), 
+                                      width = 12,  
+                                      height = 650),
                          )
                 ),
                 
@@ -713,9 +714,11 @@ server <- function(input, output) {
     #For tracking the ACHD clinic IDs selected
     drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
     #For adding new areas for report summary
-    drive.values$area.report.list <- c()
+    drive.values$area.report.list <- list()
     #For the area level data
     observe({ drive.values$area_data <- drive.area.achd() })
+    #To store map clicks
+    drive.values$map.clicks <- c()
     
     ######################### Building the Current Clinics Table ####################
     
@@ -1180,66 +1183,96 @@ server <- function(input, output) {
       #---------------DATA SETUP-----------------#
       # the area click event
       event <- input$drive.map_shape_click
+      # Add the click to the reactive list
+      if ( !(event$id %in% drive.values$map.clicks) )
+      { drive.values$map.clicks <- c(drive.values$map.clicks, event$id) }
+      
+      print(drive.values$map.clicks)
       # select the correct area
-      drive.values$event_area <- drive.values$area_data %>% filter(SA2_5DIGIT == event$id)
+      drive.values$event_area <- drive.values$area_data %>% filter(SA2_5DIGIT %in% drive.values$map.clicks)
       
       #---------------AREA SUMMARY-----------#
       output$area.output <- renderUI({
-        box(h2(drive.values$event_area$SA2_NAME),
-            actionButton('area.button', 'Add area summary to report'),
+        div(style = 'overflow-y:scroll;height:580px;',
+        box(h2("Area Focus"),
+            div(style="display:inline-block",actionButton('area.button', 'Add to report')),
+            div(style="display:inline-block",actionButton("area.reset", "Reset")),
             HTML(paste(
             "
             <br><br>
-            <b>Number of ACHD Patients:</b> ", drive.values$event_area$ACHD_count,"<br>
+            <b>Selected Areas:</b> ", paste(drive.values$event_area$SA2_NAME, collapse = ', '), "<br>
+            <br>
+            <b>Number of ACHD Patients:</b> ", sum(drive.values$event_area$ACHD_count),"<br>
             <br>
             <b>Number with:</b> <br>
             <ul>
-              <li>Simple CHD: ",drive.values$event_area$beth_1,"</li>
-              <li>Moderate CHD: ",drive.values$event_area$beth_2,"</li> 
-              <li>Complex CHD: ",drive.values$event_area$beth_3,"</li>
+              <li>Simple CHD: ",sum(drive.values$event_area$beth_1),"</li>
+              <li>Moderate CHD: ",sum(drive.values$event_area$beth_2),"</li> 
+              <li>Complex CHD: ",sum(drive.values$event_area$beth_3),"</li>
             </ul>
             <b>Number of Patients lost to follow up:</b><br> 
             <ul>
-              <li>",drive.values$event_area$ltf_3,"</li>
+              <li>",sum(drive.values$event_area$ltf_3),"</li>
             </ul>
             <b>Index of Relative Socio-economic Disadvantage</b><br>
-            (1 = most disadvantaged, 10 = least disadvantaged): <br>
+              (1 = most disadvantaged, 10 = least disadvantaged): <br>
+              <ul>",
+              paste("<li>", drive.values$event_area$SA2_NAME, ": ", 
+                    drive.values$event_area$IRSD, "</li>", collapse = ""),
+            "</ul>
+            <b>Aboriginal and Torres Strait Islander Population</b><br>
             <ul>
-              <li>",drive.values$event_area$IRSD,"</li>
+                <li>Total: ",sum(drive.values$event_area$atsi),"</li>
+                <li>Percent: ",percent(sum(drive.values$event_area$atsi) / 
+                                       sum(drive.values$event_area$total_pop)),"</li>
             </ul>
             <b>Accessibility and Remoteness Index of Australia</b><br>
             (percentage of population living in):<br>  
             <ul>
-                <li>Major Cities: ",percent(drive.values$event_area$major_cities),"</li>
-                <li>Inner Regional:",percent(drive.values$event_area$inner_regional),"</li>
-                <li>Outer Regional:",percent(drive.values$event_area$outer_regional),"</li> 
-                <li>Remote:",percent(drive.values$event_area$remote),"</li>
-                <li>Very Remote:",percent(drive.values$event_area$very_remote),"</li>
+                <li>Major Cities: ",percent(sum(drive.values$event_area$major_cities) / 
+                                    length(drive.values$event_area$SA2_NAME)),"</li>
+                <li>Inner Regional:",percent(sum(drive.values$event_area$inner_regional) / 
+                                     length(drive.values$event_area$SA2_NAME)),"</li>
+                <li>Outer Regional:",percent(sum(drive.values$event_area$outer_regional) / 
+                                     length(drive.values$event_area$SA2_NAME)),"</li> 
+                <li>Remote:",percent(sum(drive.values$event_area$remote) / 
+                             length(drive.values$event_area$SA2_NAME)),"</li>
+                <li>Very Remote:",percent(sum(drive.values$event_area$very_remote) / 
+                                  length(drive.values$event_area$SA2_NAME)),"</li>
             </ul>
             <b>Driving time to nearest clinic:</b><br> 
-            <ul>
-                <li>Current Locations:",round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_NAME == drive.values$event_area$SA2_NAME], 'hours'), digits = 2)," hrs</li>
-                <li>With New Locations:",round(as.numeric(drive.values$event_area$shortest_time, 'hours'), digits = 2)," hrs</li>
+            <ul>",
+                 paste("<li>",drive.values$event_area$SA2_NAME,":</li>  
+                 <ul>
+                    <li>Current Locations: ", 
+                    round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% drive.values$map.clicks], 'hours'), 
+                    digits = 2)," hrs</li>
+                    <li>New Locations: ", 
+                    round(as.numeric(drive.values$event_area$shortest_time, 'hours'), digits = 2)," hrs</li>
+                 </ul>", collapse = ""),   
+            "</ul>
             ")
             ),
             width = 12
         )
+        )
       })
-      
-      
       
       #---------------AREA DIAGNOSES-----------#
       # Box to display area diagnoses
       output$area.dx.box <- renderUI({
-        box(title = paste("CHD Diagnoses in ", drive.values$event_area$SA2_NAME),
+        box(title = "CHD Diagnoses in Selected Areas",
             plotOutput("dx_area_plot"),
             width = 12, height = 580
         )
       })
       
-      # PLot of Diagnoses present in area
+      # Plot of Diagnoses present in area
       output$dx_area_plot <- renderPlot({
         dx.area.data <- drive.values$event_area %>% select(dx_codes$EPCC_Code) %>% 
+                                  mutate_all(as.character) %>%
+                                  mutate_all(as.numeric) %>%
+                                  summarise_all(sum, na.rm = TRUE) %>%
                                   t() %>% as.data.frame() %>%
                                   rename("dx_count" = V1) %>% 
                                   mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)]) %>%
@@ -1255,14 +1288,35 @@ server <- function(input, output) {
           coord_flip()
       })
       
-      # Adding the area summary to the report (Really we are just adding the each new area name to a list)
-      observeEvent(input$area.button, {
-        if ( !(drive.values$event_area$SA2_5DIGIT %in% drive.values$area.report.list)  )
-        { drive.values$area.report.list <- append(drive.values$area.report.list, drive.values$event_area$SA2_5DIGIT)
-          }
+    })
+    
+    #---------------ADD AREA SUMMARY TO REPORT-----------#
+    # Adding the area summary to the report (Really we are just adding the vector or area ids to a list)
+    observeEvent(input$area.button, {
+      # Check is vector is already in list before adding
+      if ( !(Position(function(x) 
+        identical(x, drive.values$map.clicks), 
+        drive.values$area.report.list, nomatch = 0) > 0) )
+        # Add to list if not already there  
+      { drive.values$area.report.list[[length(drive.values$area.report.list) + 1]] <- list(drive.values$map.clicks) }
+    })
+    
+    #---------------RESET AREA SELECTION-----------#
+    observeEvent(input$area.reset, {
+      #clear area report
+      output$area.output <- renderUI(div(style = 'overflow-y:scroll;height:580px;',
+                                         box(title = "Select New Areas",
+                                             width = 12)))
+      # Clear the area dx plot
+      output$area.dx.box <- renderUI({
+        box(title = "Select New Areas")
       })
       
+      #reset the map clicks
+      drive.values$map.clicks <- c()
+      
     })
+    
     
 ############################# DOWNLOAD REPORT #################################
     output$report.dl <- downloadHandler(

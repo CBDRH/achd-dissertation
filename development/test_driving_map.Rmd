@@ -41,16 +41,16 @@ achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""
 #import DX coding
 dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
             filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
-            select(!c(ACHD.Database.name, check., Variable))
+            select(!c(ACHD_Database_name, check., Variable))
 
 #import Census data
-sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+sa2.TB <- readRDS(file = paste(app_data, '/sa2_demographics.rds', sep="")) %>%
                             mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
                                    IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
 
 #import htt data
-htt.nsw <- readRDS(file = paste(app_data, 'AP_output/htt_nsw.rds', sep=""))
-htt.details <- readRDS(file = paste(app_data, 'AP_output/htt_details.rds', sep=""))
+htt.nsw <- readRDS(file = paste(app_data, '/htt_nsw.rds', sep=""))
+htt.details <- readRDS(file = paste(app_data, '/htt_details.rds', sep=""))
 
 #current achd clinics
 achd_ids <- c(646, 755, 152, 683, 737, 979)
@@ -58,25 +58,9 @@ achd_ids <- c(646, 755, 152, 683, 737, 979)
 new_achd_ids <- achd_ids
 
 #Import area polygons
-sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
+sa2.polys <- readOGR(paste(app_data, 'ASGS/sa2/sa2_polys.shp', sep=""))
 
 ```
-
-``` {r}
-test <- achd %>% mutate(
-              # not seen for more than 3 years
-              ltf_3 = ifelse(as.numeric(gap_2000, 'years') > 3, 1, 0),
-              # not seen for more than 4 years
-              ltf_4 = ifelse(as.numeric(gap_2000, 'years') > 4, 1, 0),
-              # not seen for more than 5 years
-              ltf_5 = ifelse(as.numeric(gap_2000, 'years') > 5, 1, 0),
-)
-
-
-
-```
-
-
 
 ``` {r}
 
@@ -96,15 +80,15 @@ prepare.area.data <- function(achd_data) {
     
     # Diagnoses present in each area 
     dx.drive <- achd_data %>%
-        mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
-        mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
         group_by(sa2) %>% 
-        summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+        summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
     
     # Join above to table builer data
-    area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
-        left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
-        mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('SA2_NAME' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('SA2_NAME' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
         mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
                     'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
     
@@ -120,6 +104,112 @@ prepare.area.data <- function(achd_data) {
 area.achd <- prepare.area.data(achd)
 ```
 
+``` {r}
+
+id_list_1 <- list("11205", "11202", "11203")
+id_list_2 <- list("11204", "11103")
+
+```
+
+``` {r}
+area.report.list <- list()
+
+```
+
+``` {r}
+if ( !(Position(function(x) identical(x, id_list_1), area.report.list, nomatch = 0) > 0)  )
+{ area.report.list[[length(area.report.list) + 1]] <- id_list_1 }
+area.report.list
+```
+
+``` {r}
+if ( !(Position(function(x) identical(x, id_list_1), area.report.list, nomatch = 0) > 0) )
+{ area.report.list[[length(area.report.list) + 1]] <- id_list_1 }
+area.report.list
+```
+
+``` {r}
+if ( !(Position(function(x) identical(x, id_list_2), area.report.list, nomatch = 0) > 0)  )
+{ area.report.list[[length(area.report.list) + 1]] <- id_list_2 }
+area.report.list
+```
+
+``` {r}
+if ( !(Position(function(x) identical(x, id_list_2), area.report.list, nomatch = 0) > 0) )
+{ area.report.list[[length(area.report.list) + 1]] <- id_list_2 }
+area.report.list
+```
+
+``` {r}
+id_list <- c(id_list, 11189)
+
+```
+
+``` {r}
+id_list <- c(id_list, 11187)
+
+```
+
+``` {r}
+id_list <- c(id_list, 11062)
+
+```
+
+``` {r}
+
+event.area <- area.achd %>% filter(SA2_5DIGIT %in% id_list_1)
+
+```
+
+``` {r}
+event.area$SA2_NAME
+```
+
+``` {r}
+paste("Selected Areas: ", paste(event.area$SA2_NAME, collapse = ', '), sep = "")
+paste("Number of ACHD Patients: ", sum(event.area$ACHD_count), sep = "")
+paste(
+"<b>Index of Relative Socio-economic Disadvantage</b><br>
+            (1 = most disadvantaged, 10 = least disadvantaged): <br>
+            <ul>",
+              paste("<li>", event.area$SA2_NAME, ": ", event.area$IRSD, "</li>", collapse = ""),
+            "</ul>"
+)
+
+```
+
+``` {r}
+HTML(
+  "<b>Driving time to nearest clinic:</b><br> 
+      <ul>",
+          paste("<li>",event.area$SA2_NAME,":</li>  
+             <ul>
+                <li>Current Locations: ", round(as.numeric(event.area$shortest_time, 'hours'), digits = 2)," hrs</li>
+                <li>New Locations: ", round(as.numeric(event.area$shortest_time, 'hours'), digits = 2)," hrs</li>
+             </ul>", collapse = ""),   
+      "</ul>
+  "
+)
+
+round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% drive.values$map.clicks]), digits = 2)
+
+```
+
+``` {r}
+"<b>Driving time to nearest clinic:</b><br> 
+            <ul>
+                <li>Current Locations:",round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_NAME == drive.values$event_area$SA2_NAME], 'hours'), digits = 2)," hrs</li>
+                <li>With New Locations:",round(as.numeric(drive.values$event_area$shortest_time, 'hours'), digits = 2)," hrs</li>"
+```
+
+``` {r}
+# driving time of selected areas
+range(as.numeric(event.area$shortest_time, 'hours'))
+# Shortest dricing time of areas
+min(as.numeric(event.area$shortest_time, 'hours'))
+
+as.numeric(area.achd$shortest_time[area.achd$SA2_5DIGIT %in% id_list], 'hours')
+```
 
 
 ``` {r}
@@ -444,54 +534,9 @@ seq(0,
 
 ```
 
-fluidRow(valueBoxOutput('pt.count.area', width = 12)), # Patient Count
-                             fluidRow(valueBoxOutput('pt.beth.area', width = 12)), # Breakdown of disease Severity
-                             fluidRow(valueBoxOutput('pt.lft.area', width = 12)), # Number of Patients lost to follow up
-                             fluidRow(valueBoxOutput('pt.irsd.area', width = 12)), # Area disadvantage
-                             fluidRow(valueBoxOutput('pt.remote.area', width = 12)), # Area Remoteness
-
-
-# Number of Patients
-      output$pt.count.area <- renderValueBox({
-        valueBox(drive.values$event_area$ACHD_count,
-                 'ACHD patients', 
-                 width = 12, color = 'light-blue')
-      })
-      
-      # Break Down of Disease Severity
-      output$pt.beth.area <- renderValueBox({
-        valueBox(paste(drive.values$event_area$beth_1, " | ",
-                       drive.values$event_area$beth_2, " | ",
-                       drive.values$event_area$beth_3, 
-                       sep = "  "),
-                 'Simple | Moderate | Severe', 
-                 width = 12, color = 'light-blue')
-      })
-      
-      # Number of Patients Lost to Follow up
-      output$pt.lft.area <- renderValueBox({
-        valueBox(drive.values$event_area$ltf_3,
-                 'Lost to Follow Up', 
-                 width = 12, color = 'light-blue')
-      })
-      
-      # Disadvantage (IRSD)
-      output$pt.irsd.area <- renderValueBox({
-        valueBox(drive.values$event_area$IRSD,
-                 'Level of Disadvantage', 
-                 width = 12, color = 'light-blue')
-      })
-      
-      # Remoteness (ARIA)
-      output$pt.remote.area <- renderValueBox({
-        valueBox(tags$p(
-                    paste(percent(drive.values$event_area$major_cities),
-                       " | ",
-                       percent(drive.values$event_area$inner_regional + drive.values$event_area$outer_regional), 
-                       " | ",
-                       percent(drive.values$event_area$remote + drive.values$event_area$very_remote), 
-                       sep = "  "),
-                    style = "font-size: 75%;"),
-                 'Cities | Regional | Remote', 
-                 width = 12, color = 'light-blue')
-      })
+# apply the area report template for each area
+        src <- lapply(drive.values$area.report.list,
+                      function(i) knit_expand('Area_Report.Rmd'))
+        # render the area reports
+        cat(knit(text = src,
+                 quiet = TRUE))
