@@ -1,0 +1,10 @@
+name: achd_dashboard
+title:
+username:
+account: calum-nicholson
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3907518
+bundleId: 4429553
+url: https://calum-nicholson.shinyapps.io/achd_dashboard/
+when: 1617529090.59569
