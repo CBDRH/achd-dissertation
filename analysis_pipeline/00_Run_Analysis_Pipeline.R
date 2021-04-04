@@ -9,7 +9,8 @@ rmarkdown::render(here('analysis_pipeline',"01_ASGS_Lookup.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"02_Hosp_Travel_Time.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"03_SA2_Demographics.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"04_ASGS_Boundaries.Rmd"))
-rmarkdown::render(here('analysis_pipeline',"05_ACHD_database.Rmd"))
+# Skip this step for the public version
+#rmarkdown::render(here('analysis_pipeline',"05_ACHD_database.Rmd"))
 
 
 # Copy the required analysis pipeline outputs into the Shiny App data folder
