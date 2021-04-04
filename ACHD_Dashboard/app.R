@@ -22,7 +22,7 @@ library(tableHTML)
 library(here)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/'
 
 ################################## LOAD DATA ############################################
 
