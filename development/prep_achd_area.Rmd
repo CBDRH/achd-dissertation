@@ -1,0 +1,82 @@
+---
+title: "prepare_achd_area_data"
+author: "Calum Nicholson"
+date: "04/04/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+```
+
+``` {r}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
+```
+
+``` {r}
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+
+#import DX coding
+dx_codes <- read.csv(file = here("analysis_pipeline", "input", "ACHD_EPCC_coding.csv"), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD_Database_name, check., Variable))
+```
+
+
+``` {r}
+
+prepare.area.data <- function(achd_data) {
+    # Diagnosis severity counts in each area
+    beth.drive <- achd_data %>%
+        group_by(sa2) %>%
+        dplyr::summarise(ACHD_count = n(), 
+                         beth_1 = sum(bethesda_code == 1),
+                         beth_2 = sum(bethesda_code == 2), 
+                         beth_3 = sum(bethesda_code == 3), 
+                         beth_4 = sum(bethesda_code == 4),
+                         ltf_3 = sum(ltf_3),
+                         ltf_4 = sum(ltf_4),
+                         ltf_5 = sum(ltf_5))
+        
+    
+    # Diagnoses present in each area 
+    dx.drive <- achd_data %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
+        group_by(sa2) %>% 
+        summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
+    
+    # Join above to table builer data
+    area.drive <- left_join(beth.drive, dx.drive, by = 'sa2') %>% 
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
+    
+    area.drive
+}
+
+```
+
+``` {r}
+achd.area <- prepare.area.data(achd) %>%
+                rename("SA2_NAME" = sa2)
+
+```
+
+``` {r}
+#write the area achd dataset to a csv file and an R data file
+
+saveRDS(achd.area, file = here("analysis_pipeline", "input", "area.achd.rds"))
+
+write.csv(achd.area, here("analysis_pipeline", "input", "area.achd.csv"))
+```
+
+
+
+
+
