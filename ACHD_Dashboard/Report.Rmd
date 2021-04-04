@@ -352,7 +352,7 @@ The map below shows the number of ACHD patients in each area. Driving times are 
 # editted with new clinics so we will need to rebuild the data as it was before it was editted
 
 # Filter the current map data by gcc region selected
-current_map_data <- merge(sa2.polys, area.achd, by.x = 'NAME16', by.y = 'sa2_area')
+current_map_data <- merge(sa2.polys, area.achd, by.x = 'NAME16', by.y = 'SA2_NAME')
 # Add area demographics to the spatial information
 current_map_data <- subset(current_map_data, current_map_data$GCC_NAME16 %in% input$drive.gcc)
 

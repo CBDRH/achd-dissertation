@@ -31,10 +31,10 @@ achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""
 #import DX coding
 dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
             filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
-            select(!c(ACHD.Database.name, check., Variable))
+            select(!c(ACHD_Database_name, check., Variable))
 
 #import Census data
-sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+sa2.TB <- readRDS(file = paste(app_data, 'sa2_demographics.rds', sep="")) %>%
                   mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
                          IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
 ```
@@ -114,7 +114,7 @@ input <- 2
 
 if (input == 2) {
             achd.df <- achd %>% dplyr::rename("area" = sa2)
-            TB.df <- sa2.TB %>% dplyr::rename("area" = sa2_area)
+            TB.df <- sa2.TB %>% dplyr::rename("area" = SA2_NAME)
 } else if (input == 3) {
             achd.df <- achd %>% dplyr::rename("area" = sa3)
 } else {
@@ -127,26 +127,29 @@ area.achd <- achd.df %>%
                         beth_2 = sum(bethesda_code == 2), 
                         beth_3 = sum(bethesda_code == 3), 
                         beth_4 = sum(bethesda_code == 4))
-                
+
 area.dx <- achd.df %>%
-            mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
-            mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+            mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+            mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
             group_by(area) %>% 
-            dplyr::summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+            dplyr::summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
+
 
 area.data <- left_join(TB.df, area.achd, by = 'area') %>% 
              left_join(area.dx, by = 'area') %>%
-                mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+                mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
                 mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
                           
 ```
 
 ``` {r}
-area.dx <- area.data %>% filter(SA2_5DIGIT == 11007) %>% select(dx_codes$EPCC) %>% 
+area.dx <- area.data %>% filter(SA2_5DIGIT == 11007) %>% select(dx_codes$EPCC_Code) %>% 
             t() %>% as.data.frame() %>% 
             rename("dx_count" = V1) %>% 
-            mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)])
+            mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)])
 
+```
+``` {r}
 ggplot(area.dx, aes(x = dx_label, y=dx_count)) + 
                     geom_bar(stat="identity") +
                     theme(axis.text.x = element_text(angle = 90)) +

@@ -19,12 +19,10 @@ library(sf)
 library(leaflet)
 library(leaflet.extras)
 library(tableHTML)
+library(here)
 
 # Path to ACHD database data (note: only accessible at RPAH)
 pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
-
-# Path to the app data
-app_data <- './data/'
 
 ################################## LOAD DATA ############################################
 
@@ -32,18 +30,18 @@ app_data <- './data/'
 achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
 
 #import DX coding
-dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+dx_codes <- read.csv(file = here("ACHD_Dashboard", "data", "ACHD_EPCC_coding.csv"), fileEncoding="UTF-8-BOM") %>% 
             filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
-            select(!c(ACHD.Database.name, check., Variable))
+            select(!c(ACHD_Database_name, check., Variable))
 
 #import Census data
-sa2.TB <- readRDS(file = paste(app_data, 'AP_output/sa2_table_builder.rds', sep="")) %>%
+sa2.TB <- readRDS(file = here("ACHD_Dashboard", "data", "sa2_demographics.rds")) %>%
                             mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
                                    IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
 
 #import htt data
-htt.nsw <- readRDS(file = paste(app_data, 'AP_output/htt_nsw.rds', sep="")) # Driving times data
-htt.details <- readRDS(file = paste(app_data, 'AP_output/htt_details.rds', sep="")) # Hospital Metadata
+htt.nsw <- readRDS(file = here("ACHD_Dashboard", "data", "htt_nsw.rds")) # Driving times data
+htt.details <- readRDS(file = here("ACHD_Dashboard", "data", "htt_details.rds")) # Hospital Metadata
 
 #current achd clinics
 achd_ids <- c(152, 408, 646, 683, 737, 979)
@@ -51,9 +49,7 @@ achd_ids <- c(152, 408, 646, 683, 737, 979)
 new_achd_ids <- achd_ids
 
 #Import area polygons
-sa2.polys <- readOGR(paste(app_data, 'shape_files/sa2_polys.shp', sep=""))
-#sa3.polys <- readOGR(paste(app_data, 'shape_files/sa3_polys.shp', sep=""))
-#sa4.polys <- readOGR(paste(app_data, 'shape_files/sa4_polys.shp', sep=""))
+sa2.polys <- readOGR(here("ACHD_Dashboard", "data", "ASGS", "sa2", "sa2_polys.shp"))
 
 ############################# HEADER CONTENT #######################################
 
@@ -411,13 +407,13 @@ server <- function(input, output) {
         
         # created a dataset with only the disagnoses
         dx.df <- achd.filtered() %>%
-            select(dx_codes$EPCC) %>%
+            select(dx_codes$EPCC_Code) %>%
             mutate_all(as.character) %>%
             mutate_all(as.numeric) %>%
             summarise_all(sum, na.rm = TRUE) %>%
             t() %>% as.data.frame() %>% 
             rename("dx_count" = V1) %>% 
-            mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)])
+            mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)])
         
         dx.df
     })
@@ -439,15 +435,15 @@ server <- function(input, output) {
     
     # Diagnoses present in each area 
     dx.drive <- achd.filtered() %>%
-        mutate_at(as.character(dx_codes[['EPCC']]), as.character) %>% 
-        mutate_at(as.character(dx_codes[['EPCC']]), as.numeric) %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
         group_by(sa2) %>% 
-        dplyr::summarise_at(as.character(dx_codes[['EPCC']]), sum, na.rm = TRUE)
+        dplyr::summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
     
     # Join above to table builer data
-    area.drive <- left_join(sa2.TB, beth.drive, by = c('sa2_area' = 'sa2')) %>% 
-        left_join(dx.drive, by = c('sa2_area' = 'sa2')) %>%
-        mutate_at(as.character(dx_codes[['EPCC']]), function(x) replace(x, is.na(x), 0)) %>%
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('SA2_NAME' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('SA2_NAME' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
         mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
                     'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
     
@@ -735,7 +731,7 @@ server <- function(input, output) {
                           select(SA2_5DIGIT, as.character(achd_ids)) %>% # Select the relevant hospitals, and the area they are in
                           mutate_at(as.character(achd_ids), as.duration) %>% # Convert driving time data to duration type
                           left_join(drive.area.achd(), by ='SA2_5DIGIT') %>% # Join by sa2 area, adding area level data
-                          select(as.character(achd_ids), sa2_area, SA2_5DIGIT, ACHD_count, 
+                          select(as.character(achd_ids), SA2_NAME, SA2_5DIGIT, ACHD_count, 
                                  ltf_3, beth_1, beth_2, beth_3) # Select Relvant columns
     
     # Make a table summarise the current clinics
@@ -791,7 +787,7 @@ server <- function(input, output) {
         select(SA2_5DIGIT, as.character(hospital_id)) %>%
         mutate(hospital = as.duration(.[[as.character(hospital_id)]])) %>%
         left_join(drive.values$area_data, by ='SA2_5DIGIT') %>%
-        select(hospital, sa2_area, SA2_5DIGIT, ACHD_count, ltf_3, beth_1, beth_2, beth_3)
+        select(hospital, SA2_NAME, SA2_5DIGIT, ACHD_count, ltf_3, beth_1, beth_2, beth_3)
       
       # New row to add to clinic table
       new.row <- isolate(data.frame(
@@ -973,7 +969,7 @@ server <- function(input, output) {
     # sa2 polys for driving map
     drive.polys <- eventReactive(input$drive.update, {
         #add area data to polygons
-        drive.poly <- merge(sa2.polys, drive.values$area_data, by.x = 'NAME16', by.y = 'sa2_area')
+        drive.poly <- merge(sa2.polys, drive.values$area_data, by.x = 'NAME16', by.y = 'SA2_NAME')
         
         # Filter by the GCC areas selected
         polys.filtered <- subset(drive.poly, drive.poly$GCC_NAME16 %in% input$drive.gcc)
@@ -1189,7 +1185,7 @@ server <- function(input, output) {
       
       #---------------AREA SUMMARY-----------#
       output$area.output <- renderUI({
-        box(h2(drive.values$event_area$sa2_area),
+        box(h2(drive.values$event_area$SA2_NAME),
             actionButton('area.button', 'Add area summary to report'),
             HTML(paste(
             "
@@ -1222,7 +1218,7 @@ server <- function(input, output) {
             </ul>
             <b>Driving time to nearest clinic:</b><br> 
             <ul>
-                <li>Current Locations:",round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$sa2_area == drive.values$event_area$sa2_area], 'hours'), digits = 2)," hrs</li>
+                <li>Current Locations:",round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_NAME == drive.values$event_area$SA2_NAME], 'hours'), digits = 2)," hrs</li>
                 <li>With New Locations:",round(as.numeric(drive.values$event_area$shortest_time, 'hours'), digits = 2)," hrs</li>
             ")
             ),
@@ -1235,7 +1231,7 @@ server <- function(input, output) {
       #---------------AREA DIAGNOSES-----------#
       # Box to display area diagnoses
       output$area.dx.box <- renderUI({
-        box(title = paste("CHD Diagnoses in ", drive.values$event_area$sa2_area),
+        box(title = paste("CHD Diagnoses in ", drive.values$event_area$SA2_NAME),
             plotOutput("dx_area_plot"),
             width = 12, height = 580
         )
@@ -1243,10 +1239,10 @@ server <- function(input, output) {
       
       # PLot of Diagnoses present in area
       output$dx_area_plot <- renderPlot({
-        dx.area.data <- drive.values$event_area %>% select(dx_codes$EPCC) %>% 
+        dx.area.data <- drive.values$event_area %>% select(dx_codes$EPCC_Code) %>% 
                                   t() %>% as.data.frame() %>%
                                   rename("dx_count" = V1) %>% 
-                                  mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)]) %>%
+                                  mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)]) %>%
                                   filter(dx_count > 0)
         
         ggplot(data = dx.area.data, aes(x = reorder(dx_label, dx_count), y=dx_count)) + 

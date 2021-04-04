@@ -18,7 +18,7 @@ leaflet() %>%
             addTiles() %>%
             # Add Polygons
             addPolygons(
-                data = subset(drive.polys(), drive.polys()$NAME16 == selected_area$sa2_area),
+                data = subset(drive.polys(), drive.polys()$NAME16 == selected_area$SA2_NAME),
                 color = 'black',
                 fill = 'white')
 ```
@@ -48,10 +48,10 @@ Driving time to nearest clinic:
 
 ``` {r, echo = FALSE, fig.width = 10}
 # Data of diagnoses present in area
-dx.area.data <- selected_area %>% select(dx_codes$EPCC) %>% 
+dx.area.data <- selected_area %>% select(dx_codes$EPCC_Code) %>% 
                             t() %>% as.data.frame() %>%
                             rename("dx_count" = V1) %>% 
-                            mutate(dx_label = dx_codes$Label[match(row.names(.), dx_codes$EPCC)]) %>%
+                            mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)]) %>%
                             filter(dx_count > 0)
 
 # Plot of diagnoses present in area
