@@ -28,8 +28,9 @@ library(here)
 ################################## LOAD DATA ############################################
 
 # import ACHD data
-# Skip this in the pubilc version
-# achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+# In this public version this is a limit dataset that is aggregated to area level informaton
+# rather than patient level information
+achd <- readRDS(here("ACHD_Dashboard", "data", "area_achd.rds"))
 
 #import DX coding
 dx_codes <- read.csv(file = here("ACHD_Dashboard", "data", "ACHD_EPCC_coding.csv"), fileEncoding="UTF-8-BOM") %>% 
@@ -56,7 +57,6 @@ sa2.polys <- readOGR(here("ACHD_Dashboard", "data", "ASGS", "sa2", "sa2_polys.sh
 ############################# HEADER CONTENT #######################################
 
 header <- dashboardHeader(title = "Clinic Planning Tool")
-
 
 ############################# SIDEBAR CONTENT #######################################
 
@@ -376,76 +376,17 @@ server <- function(input, output) {
     
 ############################# GLOBAL REACTIVE FUNCTIONS #################################
     
-    # Global Filters
-    achd.filtered <- eventReactive( 
-      
-        c(input$sb.update,
-        input$load.data), ignoreInit = T, # Triggers on either load data, or update filters
-        
-        {achd %>% 
-            filter(death %in% input$sb.mortality) %>% # Filter by mortality status
-            filter(sex %in% input$sb.sex) %>% # filter by sex
-            filter(bethesda_code %in% input$sb.bethesda) %>% # Filter by Disease Severity
-            filter(as.numeric(age, 'years') >= input$sb.age[1]) %>% # Filter by Age; lower bound
-            filter(as.numeric(age, 'years') <= input$sb.age[2]) %>% # Filter by Age; upper bound
-            filter(as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>% # Filter by last clinic date; lower bound
-            filter(as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>% # filter by last clinic date; upper bound
-            
-            # Filtering by the selected date range. This is quite a slow process and will only run is the date range 
-            # is altered from the default, which is all-inclusive
-            {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2020-12-31") )
-                mutate(., 
-                       clinics_2000 = map(clinics_2000, ~ .x %>%
-                                                 mutate(clinic_in_period = 
-                                                        sapply(.$clinic_date, function(x) x %within% (as.Date(input$sb.dates[1])
-                                                                                                      %--% 
-                                                                                                      as.Date(input$sb.dates[2]))))),
-                       in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)) %>% 
-                    filter(in_time_period == TRUE)
-                else . }
-    }) 
+    # Global Filters - not active in public version
+    # achd.filtered <- 
     
-    # count frequency of diagnoses
-    dx.count <- reactive({
-        
-        # created a dataset with only the disagnoses
-        dx.df <- achd.filtered() %>%
-            select(dx_codes$EPCC_Code) %>%
-            mutate_all(as.character) %>%
-            mutate_all(as.numeric) %>%
-            summarise_all(sum, na.rm = TRUE) %>%
-            t() %>% as.data.frame() %>% 
-            rename("dx_count" = V1) %>% 
-            mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)])
-        
-        dx.df
-    })
+    # count frequency of diagnoses - not active in public version
+    # dx.count <- 
 
     # prepare area level data
     drive.area.achd <- reactive({
-      
-    # Diagnosis severity counts in each area
-    beth.drive <- achd.filtered() %>%
-        group_by(sa2) %>%
-        dplyr::summarise(ACHD_count = n(), # Number of ACHD patients in each area
-                         beth_1 = sum(bethesda_code == 1), # Number with simple CHD in each area
-                         beth_2 = sum(bethesda_code == 2), # Number with moderate CHD in each area
-                         beth_3 = sum(bethesda_code == 3), # Number with complex CHD in each area
-                         beth_4 = sum(bethesda_code == 4), # Number with unknown complexity in each area
-                         ltf_3 = sum(ltf_3), # Number of patients not seen for 3 years in each area
-                         ltf_4 = sum(ltf_4), # Number of patients not seen for 4 years in each area
-                         ltf_5 = sum(ltf_5)) # Number of patients not seen for 5 years in each area
-    
-    # Diagnoses present in each area 
-    dx.drive <- achd.filtered() %>%
-        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
-        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
-        group_by(sa2) %>% 
-        dplyr::summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
-    
-    # Join above to table builer data
-    area.drive <- left_join(sa2.TB, beth.drive, by = c('SA2_NAME' = 'sa2')) %>% 
-        left_join(dx.drive, by = c('SA2_NAME' = 'sa2')) %>%
+
+    # Join achd area data to table builer data
+    area.drive <- left_join(sa2.TB, achd, by = 'SA2_NAME') %>%
         mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
         mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
                     'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
@@ -564,25 +505,25 @@ server <- function(input, output) {
 ############################# SNAPSHOTS TAB #################################
     
     ############################# Value Boxes #################################
-    # Value boxes with the filtered data
+    # Value boxes with calcuclated with achd area data instead of filtered patient data
     
     output$pt.count.ss <- renderValueBox({
-      valueBox(achd.filtered() %>% nrow(),
+      valueBox(sum(drive.area.achd()$ACHD_count),
                'selected patients', 
                width = 3, color = 'light-blue')
     })
     output$simple.count.ss <- renderValueBox({
-      valueBox(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), 
+      valueBox(sum(drive.area.achd()$beth_1), 
                "Patients with Simple CHD", 
                color = 'light-blue')
     })
     output$moderate.count.ss <- renderValueBox({
-      valueBox(achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), 
+      valueBox(sum(drive.area.achd()$beth_2), 
                "Patients with Moderate CHD", 
                color = 'light-blue')
     })
     output$complex.count.ss <- renderValueBox({
-      valueBox(achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
+      valueBox(sum(drive.area.achd()$beth_3), 
                "Patients with Complex CHD", 
                color = 'light-blue')
     })
@@ -597,14 +538,14 @@ server <- function(input, output) {
                                       height = 200))
                      })
                    })
-    output$age_plot <- renderPlot({
-      ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
-        geom_histogram(fill = "light grey", color = "black") +
-        labs(y = "Number of Patients", 
-             x = "Age (yrs)") +
-        theme(axis.title.x=element_blank()) +
-        theme_minimal()
-    })
+#    output$age_plot <- renderPlot({
+#      ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
+#        geom_histogram(fill = "light grey", color = "black") +
+#        labs(y = "Number of Patients", 
+#             x = "Age (yrs)") +
+#        theme(axis.title.x=element_blank()) +
+#        theme_minimal()
+#    })
     
     # Time since last clinic plot
     observeEvent(c(input$sb.update,
@@ -614,14 +555,14 @@ server <- function(input, output) {
                                       height = 200))
                      })
                    })
-    output$ltf_plot <- renderPlot({
-      ggplot(achd.filtered(), aes(x=as.numeric(gap_2000, "years"))) +
-        geom_histogram(fill = "light grey", color = "black") +
-        labs(y = "Number of Patients", 
-             x = "Time since last clinic visit (yrs)") +
-        theme(axis.title.x=element_blank()) +
-        theme_minimal()
-    })
+#    output$ltf_plot <- renderPlot({
+#      ggplot(achd.filtered(), aes(x=as.numeric(gap_2000, "years"))) +
+#        geom_histogram(fill = "light grey", color = "black") +
+#        labs(y = "Number of Patients", 
+#             x = "Time since last clinic visit (yrs)") +
+#        theme(axis.title.x=element_blank()) +
+#        theme_minimal()
+#    })
     
     
     # Sex bar plot
@@ -633,17 +574,17 @@ server <- function(input, output) {
                        
                      })
                    })
-    output$sex_plot <- renderPlot ({
-      achd.filtered() %>% filter(!is.na(sex)) %>%
-        ggplot(aes(x=sex)) +
-        geom_bar(fill = "light grey", color = "black") +
-        scale_x_discrete(name = "Sex",
-                         labels=c("1" = "Male", "2" = "Female",
-                                  "4" =  "Neither Female or Male")) +
-        labs(y = "Number of Patients") +
-        theme(axis.title.x=element_blank()) +
-        theme_minimal()
-    })
+#    output$sex_plot <- renderPlot ({
+#      achd.filtered() %>% filter(!is.na(sex)) %>%
+#        ggplot(aes(x=sex)) +
+#        geom_bar(fill = "light grey", color = "black") +
+#        scale_x_discrete(name = "Sex",
+#                         labels=c("1" = "Male", "2" = "Female",
+#                                  "4" =  "Neither Female or Male")) +
+#        labs(y = "Number of Patients") +
+#        theme(axis.title.x=element_blank()) +
+#        theme_minimal()
+#    })
     
     # Number of Diagnoses
     observeEvent(c(input$sb.update,
@@ -653,15 +594,15 @@ server <- function(input, output) {
                                   height = 200)
                      })
                    })
-    output$ndx_plot <- renderPlot ({
-      ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
-        geom_bar(fill = "light grey", color = "black") +
-        scale_x_continuous() +
-        labs(x = "Number of Diagnoses", 
-             y = "Number of Patients") +
-        theme() +
-        theme_minimal() 
-    })
+#    output$ndx_plot <- renderPlot ({
+#      ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
+#        geom_bar(fill = "light grey", color = "black") +
+#        scale_x_continuous() +
+#        labs(x = "Number of Diagnoses", 
+#             y = "Number of Patients") +
+#        theme() +
+#        theme_minimal() 
+#    })
     
     
     # Number of Clinic Visits
@@ -672,15 +613,15 @@ server <- function(input, output) {
                                   height = 200)
                      })
                    })
-    output$nclinic_plot <- renderPlot ({
-      ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
-        geom_bar(fill = "light grey", color = "black") +
-        scale_x_continuous() +
-        labs(x = "Number of Clinic Visits", 
-             y = "Number of Patients") +
-        theme() +
-        theme_minimal() 
-    })
+#    output$nclinic_plot <- renderPlot ({
+#      ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
+#        geom_bar(fill = "light grey", color = "black") +
+#        scale_x_continuous() +
+#        labs(x = "Number of Clinic Visits", 
+#             y = "Number of Patients") +
+#        theme() +
+#        theme_minimal() 
+#    })
     
     ### Frequency of Diagnoses
     observeEvent(c(input$sb.update,
@@ -692,17 +633,17 @@ server <- function(input, output) {
                        )
                      })
                    })
-    output$dx_plot <- renderPlot({
-      dx.count() %>% filter(dx_count > 0) %>% 
-        ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
-        geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
-        theme(axis.text.x = element_text(angle = 90)) +
-        labs(title = "Frequecy of each diagnosis", 
-             y = "count",
-             x = "") +
-        coord_flip() +
-        theme_minimal()
-    })
+#    output$dx_plot <- renderPlot({
+#      dx.count() %>% filter(dx_count > 0) %>% 
+#        ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
+#        geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
+#        theme(axis.text.x = element_text(angle = 90)) +
+#        labs(title = "Frequecy of each diagnosis", 
+#             y = "count",
+#             x = "") +
+#        coord_flip() +
+#        theme_minimal()
+#    })
 
 ############################# DRIVING TAB #################################
  
@@ -848,7 +789,7 @@ server <- function(input, output) {
     observeEvent(input$drive.update, {
     # Total Number of Patients
     output$pt.count.drive <- renderValueBox({
-        valueBox(tags$p(achd.filtered() %>% nrow(),
+        valueBox(tags$p(sum(drive.area.achd()$ACHD_count),
                         style = "font-size: 75%;"),
                  'selected patients', 
                  width = 3, color = 'light-blue')
@@ -856,9 +797,9 @@ server <- function(input, output) {
     # Breakdown is disease severity
     output$beth.count.drive <- renderValueBox({
         valueBox(tags$p(
-          paste(achd.filtered() %>% filter(bethesda_code == 1) %>% nrow(), " | ",
-                achd.filtered() %>% filter(bethesda_code == 2) %>% nrow(), " | ",
-                achd.filtered() %>% filter(bethesda_code == 3) %>% nrow(), 
+          paste(sum(drive.area.achd()$beth_1), " | ",
+                sum(drive.area.achd()$beth_2), " | ",
+                sum(drive.area.achd()$beth_3), 
                 sep = "  "),
           style = "font-size: 75%;"),
           'Simple | Moderate | Severe',
@@ -867,7 +808,7 @@ server <- function(input, output) {
     })
     # Total Number of Patients Lost to Follow up
     output$ltf.count.drive <- renderValueBox({
-        valueBox(tags$p(sum(achd.filtered()$ltf_3),
+        valueBox(tags$p(sum(drive.area.achd()$ltf_3),
                         style = "font-size: 75%;"), 
                  "Patients Lost to Follow up", 
                  color = 'light-blue')

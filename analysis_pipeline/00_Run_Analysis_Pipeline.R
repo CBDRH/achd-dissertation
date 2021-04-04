@@ -41,8 +41,8 @@ file.copy(here("analysis_pipeline", "output", "htt_details.rds"),
 )
 
 # Area ACHD data
-file.copy(here("analysis_pipeline", "input", "achd_area.rds"),
-          here("ACHD_Dashboard", "data", "achd_area.rds"),
+file.copy(here("analysis_pipeline", "input", "area_achd.rds"),
+          here("ACHD_Dashboard", "data", "area_achd.rds"),
           overwrite = FALSE
 )
 

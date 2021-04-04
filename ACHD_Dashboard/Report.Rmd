@@ -32,14 +32,14 @@ library(kableExtra)
 ```
 
 ``` {r, include = FALSE, echo = FALSE}
-# the filtered achd data
-achd <- achd.filtered()
+# the filtered achd data - not available in public version
+# achd <- achd.filtered()
 
 # area level achd data (note, before are changes are made by new clinic additions)
 area.achd <- drive.area.achd()
 
-# Diagnosis Frequency Data
-dx.data <- dx.count()
+# Diagnosis Frequency Data - This function is reliant on achd.filtered()
+# dx.data <- dx.count()
 ```
 
 
@@ -75,141 +75,7 @@ The Patient Dataset had the following filters applied:
 * __Years Since Last Clinic Visit:__ `r input$sb.last.clinic[1]` yrs to `r input$sb.last.clinic[2]` yrs  
 * __Mortality Status:__ `r  mort[input$sb.mortality]` 
 
-After Filtering, these are some basic demographics of the patient data:  
-
-``` {r, include = FALSE, echo = FALSE }
-# Table Summarising the Patient data
-pt.summary <- data.frame(
-                        # Total number of patients
-                        no.patient = achd %>% summarise(
-                                                    achd.no = n(), # All Patients
-                                                    simple.no = sum(bethesda_code == 1), # Simple CHD
-                                                    moderate.no = sum(bethesda_code == 2), # Moderate CHD
-                                                    complex.no = sum(bethesda_code == 3) # Complex CHD
-                                                  ) %>% t(),
-                        # Number of Patients Lost to Follow up
-                        ltf.patient = achd %>% filter(ltf_3 == 1) %>%
-                                                summarise(
-                                                    achd.no = n(), # All Patients
-                                                    simple.no = sum(bethesda_code == 1), # Simple CHD
-                                                    moderate.no = sum(bethesda_code == 2), # Moderate CHD
-                                                    complex.no = sum(bethesda_code == 3) # Complex CHD
-                                                  )  %>% t(),
-                        # Number of Patients within 1 hour drive
-                        hr.patient = area.achd %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
-                                                    summarise(
-                                                      hr.no = sum(ACHD_count), # All Patients
-                                                      hr.simple = sum(beth_1), # Simple CHD
-                                                      hr.moderate = sum(beth_2), # Moderate CHD
-                                                      hr.complex = sum(beth_3) # Complex CHD
-                                                    ) %>% t()
-                          ) %>% 
-                            mutate(ltf.percent = percent( ltf.patient / no.patient ), #LTF patients as a percentage of all patients
-                                   hr.percent = percent( hr.patient / no.patient )) %>% #<hr patients as a perc of all patients
-                            select(no.patient, ltf.percent, hr.percent)
-
-row.names(pt.summary) <- c("All", "Simple CHD", "Moderate CHD", "Complex CHD")
-```
-
-``` {r, echo = FALSE}
-# Display the Table Nicely
-pt.summary %>%
-  kbl(align=rep('c', 3), # Centre the data
-      # Add nice Column Names
-      col.names = c("No. Patients",
-                  "Lost to F/up",
-                  "Pts < 1 hr drive"),
-      # Table caption
-      caption = "<b>Table 1</b>: Number of patients, lost to follow up rates and driving time to clinics;
-                                 by disease severity") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16)
-```
-
-``` {r, include = FALSE, echo = FALSE, warning = FALSE, message = FALSE}
-# Plots for patient level demographics
-
-# Age Histogram
-age_plot <- ggplot(achd, aes(x=as.numeric(age, "years"))) +
-                  geom_histogram(fill = "light grey", color = "black") +
-                  labs(y = "Number of Patients", 
-                       x = "Age (yrs)") +
-                  theme(axis.title.x=element_blank()) +
-                  theme_minimal()
-
-# Sex Bar Plot
-sex_plot <- achd %>% filter(!is.na(sex)) %>%
-                ggplot(aes(x=sex)) +
-                    geom_bar(fill = "light grey", color = "black") +
-                    scale_x_discrete(name = "",
-                                     labels=c("1" = "Male", "2" = "Female",
-                                              "4" =  "Neither Female or Male")) +
-                    labs(y = "Number of Patients") +
-                    theme(axis.title.x=element_blank()) +
-                    theme_minimal()
-
-# Number of dx per patients
-ndx_plot <- ggplot(achd, aes(x=as.integer(no_dx)) ) +
-                    geom_bar(fill = "light grey", color = "black") +
-                    scale_x_continuous() +
-                    labs(x = "Number of Diagnoses", 
-                         y = "Number of Patients") +
-                    theme() +
-                    theme_minimal() 
-
-# Number of Clinic visits per patient
-nclinic_plot <- ggplot(achd, aes(x=no_clinics_2000)) +
-                        geom_bar(fill = "light grey", color = "black") +
-                        scale_x_continuous() +
-                        labs(x = "Number of Clinic Visits", 
-                             y = "Number of Patients") +
-                        theme() +
-                        theme_minimal() 
-
-# Time since last visit histogram
-ltf_plot <- ggplot(achd, aes(x=as.numeric(gap_2000, "years"))) +
-                        geom_histogram(fill = "light grey", color = "black") +
-                        labs(y = "Number of Patients", 
-                             x = "Time since last clinic visit (yrs)") +
-                        theme(axis.title.x=element_blank()) +
-                        theme_minimal()
-
-# Frequency of each dx
-dx_plot <- dx.data %>% filter(dx_count > 0) %>% 
-                          ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
-                              geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
-                              theme(axis.text.x = element_text(angle = 90)) +
-                              labs(title = "Frequecy of each diagnosis", 
-                                   y = "count",
-                                   x = "") +
-                              coord_flip() +
-                              theme_minimal()
-```
-  
-&nbsp;  
-
-``` {r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=10}
-# Figure 1 - Patient level demograohics
-fig_1 <-ggarrange(
-              ggarrange(age_plot, ltf_plot, labels = c("A","B"), nrow = 1),
-              ggarrange(sex_plot, ndx_plot, nclinic_plot, labels = c("C", "D", "E"), nrow = 1),
-              nrow = 2
-              )
-
-fig_1
-```
-
-__Figure 1:__ Patient level demographics; __A__ distribution of patient age, __B__ time since patients last clinic visit, __C__ distribution of patient sex, __D__ the number of diagnoses per patient and __E__ number of clinic visits per patient.
-
-&nbsp;  
-
-``` {r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=20}
-# Figure 2 - Frequency of each Diagnosis
-dx_plot
-```
-
-__Figure 2:__ Frequency of each Congential Heart Disease diagnosis appearing in the database
+Note - the patient summary requires access to the patient level dataset and therefore is not available in the public version of the app.
 
 ## Area Data
 

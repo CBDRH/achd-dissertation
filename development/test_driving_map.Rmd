@@ -103,6 +103,31 @@ prepare.area.data <- function(achd_data) {
 ``` {r}
 area.achd <- prepare.area.data(achd)
 ```
+``` {r}
+achd <- here("ACHD_Dashboard", "data", "area_achd.rds")
+
+sa2.TB <- readRDS(file = here("ACHD_Dashboard", "data", "sa2_demographics.rds")) %>%
+                            mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                                   IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+
+```
+
+``` {r}
+area.drive <- left_join(sa2.TB, achd, by = 'SA2_NAME') %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
+
+```
+
+``` {r}
+sum(area.achd$ACHD_count)
+sum(area.achd$beth_1)
+sum(area.achd$beth_2)
+sum(area.achd$beth_3)
+
+```
+
 
 ``` {r}
 
