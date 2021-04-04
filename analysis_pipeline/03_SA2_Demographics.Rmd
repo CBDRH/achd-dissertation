@@ -277,6 +277,7 @@ sa2.data11 <- left_join(sa2.data10, HEAP, by = 'SA2_NAME')
 ```
 
 __Disadvantage__
+
 ``` {r}
 irsd <- read.SA2.table('seifa_irsd.csv')
 
@@ -362,8 +363,17 @@ datalong$remoteness <- factor(datalong$remoteness, levels = datalong$remoteness)
 ggplot(data = datalong, aes(x = factor(remoteness), y = value)) +
   geom_col() +
   scale_y_continuous(limits = c(0,1), labels = percent)
+```
 
+__ATIS__
+``` {r}
+atsi <- read.SA2.table('atis.csv') %>%
+            mutate(atsi = Aboriginal + Torres.Strait.Islander + Both.Aboriginal.and.Torres.Strait.Islander,
+                   atsi_perc = atsi / total_pop) %>%
+            rename("SA2_NAME" = INGP.Indigenous.Status) %>%
+            select(SA2_NAME, atsi, atsi_perc)
 
+sa2.data15 <- left_join(sa2.data14, atsi, by = 'SA2_NAME')
 
 ```
 
@@ -374,7 +384,7 @@ SA2_areas <- read.csv('./output/ASGS_areas.csv') %>%
                   select(SA2_NAME, SA2_5DIGIT, GCC_NAME)
 
 # Add the SA2 area codes to the new dataset
-sa2.data15 <- left_join(sa2.data14, SA2_areas, by = 'SA2_NAME')
+sa2.data16 <- left_join(sa2.data15, SA2_areas, by = 'SA2_NAME')
 
 ```
 
@@ -405,7 +415,7 @@ htt <- readRDS(file = "./output/htt_nsw.rds") %>%
 
 ``` {r}
 #merge the travel time data with the area level dataset
-sa2.data16 <- left_join(sa2.data15, htt, by = 'SA2_5DIGIT') %>%
+sa2.data17 <- left_join(sa2.data16, htt, by = 'SA2_5DIGIT') %>%
              # Convert the numeric data to duration data (in seconds)
              mutate(time_to_orange = duration(time_to_orange, "seconds"),
                     time_to_nowra = duration(time_to_nowra, "seconds"),
@@ -419,11 +429,11 @@ sa2.data16 <- left_join(sa2.data15, htt, by = 'SA2_5DIGIT') %>%
 
 ``` {r}
 # Final table
-knitr::kable(head(sa2.data16))
+knitr::kable(head(sa2.data17))
 
 #save as csv and r data file
-write.csv(sa2.data16, "./output/sa2_demographics.csv")
-saveRDS(sa2.data16, file = "./output/sa2_demographics.rds")
+write.csv(sa2.data17, "./output/sa2_demographics.csv")
+saveRDS(sa2.data17, file = "./output/sa2_demographics.rds")
 
 ```
 
