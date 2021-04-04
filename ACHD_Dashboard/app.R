@@ -22,12 +22,14 @@ library(tableHTML)
 library(here)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
+# Skip this in the public version
+#pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map'
 
 ################################## LOAD DATA ############################################
 
-#import ACHD data
-achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+# import ACHD data
+# Skip this in the pubilc version
+# achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
 
 #import DX coding
 dx_codes <- read.csv(file = here("ACHD_Dashboard", "data", "ACHD_EPCC_coding.csv"), fileEncoding="UTF-8-BOM") %>% 
