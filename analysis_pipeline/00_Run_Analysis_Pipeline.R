@@ -40,6 +40,12 @@ file.copy(here("analysis_pipeline", "output", "htt_details.rds"),
           overwrite = FALSE
 )
 
+# Area ACHD data
+file.copy(here("analysis_pipeline", "input", "achd_area.rds"),
+          here("ACHD_Dashboard", "data", "achd_area.rds"),
+          overwrite = FALSE
+)
+
 # Copy the shape files
 dir.create(here("ACHD_Dashboard", "data", "ASGS"))
 file.copy(
