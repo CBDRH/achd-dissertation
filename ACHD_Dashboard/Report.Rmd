@@ -414,7 +414,8 @@ leaflet() %>%
 
 ```
 
-
+__Figure 4:__ Map of New South Wales with a Choloropeth showing the number of ACHD patients in each area. Area Boundaries at at the SA2 level  
+&nbsp;  
 ## Current ACHD Clinics in NSW
 
 There are currently 6 Clinic locatios for Adult Congenital Heart Disease Services in NSW. Please note that not all clinic locations are available in the Hospital Travel Times dataset, in these cases, the closest available hospital has been used instead. The table below outlines the clinic matches and the distance between them.
@@ -532,6 +533,7 @@ leaflet() %>%
 
 ```
 
+__Figure 5:__ Map of New South Wales with a Choloropeth showing the driving time in hours from each area to the nearest ACHD clinic. Area Boundaries at at the SA2 level, map markers show ACHD clinic locations.  
 &nbsp;  
 
 ``` {r, echo = FALSE, results = 'asis'}

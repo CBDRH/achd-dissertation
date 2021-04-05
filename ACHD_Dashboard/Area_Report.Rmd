@@ -2,6 +2,29 @@
 &nbsp;  
 &nbsp; 
 
+```{css, echo=FALSE}
+<head>
+<style>
+div {
+  border: 3px solid #4CAF50;
+  padding: 5px;
+}
+
+.img1 {
+  float: right;
+}
+
+.clearfix::after {
+  content: "";
+  clear: both;
+  display: table;
+}
+
+</style>
+</head>
+```
+
+<div class = "clearfix">
 ## Area Focus 
 
 ``` {r, echo = FALSE}
@@ -9,9 +32,7 @@
 selected_areas <- drive.values$area_data %>% filter(SA2_5DIGIT %in% {{i}})
 ```
 
-<div style= "float:right;
-             position: relative;
-             ">
+<div class = "img1">
 ``` {r, echo = FALSE}
 area.polys <- subset(drive.polys(), drive.polys()$NAME16 %in% selected_areas$SA2_NAME)
 
@@ -35,6 +56,9 @@ leaflet() %>%
 ```
 
 ``` {r, echo = FALSE, fig.width = 7}
+# Only generate dx plot if there are ACHD patients in the selected areas
+if ( sum(selected_areas$ACHD_count) != 0 ) {
+
 # Data of diagnoses present in area
 dx.area.data <- selected_areas %>% select(dx_codes$EPCC_Code) %>% 
                             mutate_all(as.character) %>%
@@ -54,6 +78,7 @@ ggplot(data = dx.area.data, aes(x = reorder(dx_label, dx_count), y=dx_count)) +
                    y = "count",
                    x = "") +
               coord_flip()
+}
 ```
 </div>
 
@@ -116,5 +141,7 @@ HTML(paste(
             ")
             )
 ```
+</div>
+
 </div>
 

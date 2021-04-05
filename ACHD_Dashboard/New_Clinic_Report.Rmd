@@ -86,8 +86,8 @@ leaflet() %>%
 
 ```
 
-&nbsp;  
-&nbsp; 
+__Figure 6:__ Map of New South Wales with a Choloropeth showing the driving time in hours from each area to the nearest ACHD clinic, with new clinics added. Area Boundaries at at the SA2 level, map markers show ACHD clinic locations, green markers are the current clinics, orange markers are the newly selected clinics.  
+&nbsp;
 
 ``` {r, echo = FALSE, include = FALSE}
 # Table summarising key measures with current clincis only

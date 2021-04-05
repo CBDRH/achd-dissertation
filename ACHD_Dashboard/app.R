@@ -22,7 +22,7 @@ library(tableHTML)
 library(here)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/'
+pt_data <- '/Users/calumnicholson/script/r-projects/achd-data/'
 
 ################################## LOAD DATA ############################################
 
@@ -266,28 +266,32 @@ body <- dashboardBody(
                     <b>Map Customisation</b><br>
                     The first option ‘Filter by Region’ allows you to specifically choose geographical areas based on larger region, 
                     by default all regions are selected. Deselecting highly populated areas (‘Greater Sydney’ and ‘ACT’) can help to 
-                    explore less populated areas (‘Rest of NSW’) in more details. There are two overlay options that can be places on the map. The first ‘Driving Time to Nearest Clinic’ will 
-                    display a choropleth of the driving time from each area to the nearest ACHD Clinics. The second, ‘Total ACHD 
-                    Population’ will display a choropleth of the number of ACHD patients in each area.<br>
+                    explore less populated areas (‘Rest of NSW’) in more details. There are two overlay options that can be places on 
+                    the map. The first ‘Driving Time to Nearest Clinic’ will display a choropleth of the driving time from each area to 
+                    the nearest ACHD Clinics. The second, ‘Total ACHD Population’ will display a choropleth of the number of ACHD patients 
+                    in each area.<br>
                     <br>
                     <b>Clicking the ‘Update’ button will load the app and add any updates or changes that you have selected.</b><br>
                     <br>
                     <b>New Clinic Selection</b><br>
                     This section will allow you to choose hospitals for new clinic locations. First select the desire Primary 
                     Health Network Area, this will allow you to choose the Local Hospital Network area which will in turn allow 
-                    you to select a hospital from that area. Click “Add Clinic” to add the new hospital to the list and “Reset 
-                    Clinics” to remove all the selected hospitals. Once you have chosen all the desired hospital locations, click 
-                    ‘update’ in the Map Customisation box to add the clinics to the map.<br>
+                    you to select a hospital from that area. Click “Add Clinic” to add the new hospital to the list (the New Clincs
+                    Table) and “Reset Clinics” to remove all the selected hospitals. Once you have chosen all the desired hospital 
+                    locations, click‘update’ in the Map Customisation box to add the clinics to the map.<br>
                     <br>
                     <b>Clinics Tables</b><br>
                     There are two tabs in this section, “Current Clinics” provides information about the current ACHD Clinics and 
-                    “New Clinics” provide information about the newly selected clinics.<br>
+                    “New Clinics” provide information about the newly selected clinics. The 'Patients' column shows the number of 
+                    ACHD patients that are within a 1 hour drive of the clinic, the 'ltf' column shows the number of patients
+                    who have not been seen for more that 3 years and are within a 1 hour drive of the clinic.<br>
                     <br>
                     <b>The Map and Area Information</b><br>
                     Hovering over area on the map will provide more information about that area and clicking the area will display 
-                    more details to the left of the map. Once the area information is displayed you will be provided with an option 
-                    to add that area summary to the downloadable report. Click the ‘Add area summary to report’ button to add this 
-                    area information to the report. This can be done sequentially to add multiple area summaries to the report.<br>
+                    more details to the left of the map. You can click as many areas as you like build the 'Area Focus' report. Once 
+                    the area information is displayed you will be provided with an option to add that area summary to the downloadable 
+                    report. Click the ‘Add to report’ button to add this area information to the report. This can be done sequentially 
+                    to add multiple area summaries to the report. Click 'Reset' to unselect the areas and start again. <br>
                     </p>
                     "
                     )
@@ -695,6 +699,7 @@ server <- function(input, output) {
         ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
         geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
         theme(axis.text.x = element_text(angle = 90)) +
+        scale_y_continuous(position = "right") +
         labs(title = "Frequecy of each diagnosis", 
              y = "count",
              x = "") +
@@ -1187,7 +1192,6 @@ server <- function(input, output) {
       if ( !(event$id %in% drive.values$map.clicks) )
       { drive.values$map.clicks <- c(drive.values$map.clicks, event$id) }
       
-      print(drive.values$map.clicks)
       # select the correct area
       drive.values$event_area <- drive.values$area_data %>% filter(SA2_5DIGIT %in% drive.values$map.clicks)
       
@@ -1259,6 +1263,8 @@ server <- function(input, output) {
       })
       
       #---------------AREA DIAGNOSES-----------#
+      # Only run if there are patients in the areas selected
+      if ( sum(drive.values$event_area$ACHD_count) != 0 ) {
       # Box to display area diagnoses
       output$area.dx.box <- renderUI({
         box(title = "CHD Diagnoses in Selected Areas",
@@ -1287,11 +1293,12 @@ server <- function(input, output) {
                x = "") +
           coord_flip()
       })
+      }
       
     })
     
     #---------------ADD AREA SUMMARY TO REPORT-----------#
-    # Adding the area summary to the report (Really we are just adding the vector or area ids to a list)
+    # Adding the area summary to the report (Really we are just adding the vector of area ids to a list)
     observeEvent(input$area.button, {
       # Check is vector is already in list before adding
       if ( !(Position(function(x) 
