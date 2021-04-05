@@ -9,6 +9,7 @@ rmarkdown::render(here('analysis_pipeline',"01_ASGS_Lookup.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"02_Hosp_Travel_Time.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"03_SA2_Demographics.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"04_ASGS_Boundaries.Rmd"))
+# Step 5 will only run wit access to patient data (at RPAH only)
 rmarkdown::render(here('analysis_pipeline',"05_ACHD_database.Rmd"))
 
 
