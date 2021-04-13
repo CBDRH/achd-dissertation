@@ -89,7 +89,7 @@ HTML(paste(
             <br><br>
             <b>Selected Areas:</b> ", paste(selected_areas$SA2_NAME, collapse = ', '), "<br>
             <br>
-            <b>Number of ACHD Patients:</b> ", sum(selected_areas$ACHD_count),"<br>
+            <b>Number of ACHD Patients:</b> ",sum(selected_areas$ACHD_count),"<br>
             <br>
             <b>Number with:</b> <br>
             <ul>

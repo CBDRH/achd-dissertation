@@ -11,17 +11,16 @@ drive.values$add_clinic_table %>%
   # Add Total Column
   bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
   #Display the table nicely
-            kbl(align=rep('c', 3), # Centre the data
+            kbl(align=c('l','r','r'), # Centre the data
       # Nice Column Names
       col.names = c("New ACHD Clinics",
-                  "Patient within 1hr",
-                  "Lost to F/up within 1hr"),
+                  "Patient within 1hr (n)",
+                  "Lost to F/up within 1hr (n)"),
       # Table caption
       caption = "<b>Table 5</b>: Number of patients captured in the new clinics") %>%
   kable_classic_2(full_width = F, position = "left",
                   html_font = "Cambria",
                   font_size = 16)
-
 ```
 
 ### Average Driving time to ACHD Clinics  
@@ -32,6 +31,18 @@ The map below details the driving time from each SA2 area in NSW to the nearest 
 ``` {r, echo = FALSE, fig.width=13, fig.height=10}
 # Remove NAs from legend
 leg_data_new <- drive.polys()@data %>% filter(!is.na(shortest_time))
+
+new_labels <- sprintf(
+            "<strong>%s</strong><br/>
+            %i ACHD patients<br/>
+            Simple: %i | Moderate: %i | Severe: %i<br/>
+            %.1f hr drive to nearest clinic<br/>",
+            drive.polys()$NAME16, 
+            drive.polys()$ACHD_count,
+            drive.polys()$beth_1, drive.polys()$beth_2, drive.polys()$beth_3,
+            as.numeric(drive.polys()$shortest_time, 'hours')
+            ) %>% 
+                lapply(htmltools::HTML)
 
 # Map showing the driving times to clinics - current and new clinics
 leaflet() %>%
@@ -59,7 +70,7 @@ leaflet() %>%
                     dashArray = "",
                     fillOpacity = 0.7,
                     bringToFront = TRUE),
-                label = labels.drive(),
+                label = new_labels,
                 labelOptions = labelOptions(
                     style = list("font-weight" = "normal", padding = "3px 8px"),
                     textsize = "15px",
@@ -142,8 +153,10 @@ diff <- data.frame(
 
 # Add all the row together into 1 table
 clinic.compare <- rbind(clinic.compare.current, clinic.compare.new, diff) %>%
-                          mutate(hr_p = percent(hr_p),
-                                 ltf_p = percent(ltf_p)
+                          mutate(hr_p = round(hr_p, digits = 2),
+                                 ltf_p = round(ltf_p, digits = 2),
+                                 avg_drive = round(avg_drive, digits = 2),
+                                 long_drive = round(long_drive, digits = 2)
                                  )
 
 row.names(clinic.compare) <- c("Current Clincs Locations", "New Clinics Locations", "Difference")
@@ -154,14 +167,14 @@ row.names(clinic.compare) <- c("Current Clincs Locations", "New Clinics Location
 ``` {r, echo = FALSE}
 # Display the table nicely
 clinic.compare %>%
-            kbl(align=rep('c', 6), # Centre the data
+            kbl(align=rep('r', 6), # Centre the data
       # Make nice column names
-      col.names = c("No. Patient within 1hr",
-                    "Perc. Patients within 1hr",
-                    "No. Lost to F/up within 1hr",
-                    "Perc. Lost to F/up within 1hr",
-                    "Average Driving to ACHD Clinic",
-                    "Longest Driving time to ACHD Clinic"),
+      col.names = c("Patients within 1hr (n)",
+                    "Patients within 1hr (%)",
+                    "Lost to F/up within 1hr (n)",
+                    "Lost to F/up within 1hr (%)",
+                    "Average Drive to ACHD Clinic (hrs)",
+                    "Longest Drive to ACHD Clinic (hrs)"),
       # Table caption
       caption = "<b>Table 6</b>: Comparing the reach of current ACHD clinic locations to
                                   new ACHD clinic locations") %>%
