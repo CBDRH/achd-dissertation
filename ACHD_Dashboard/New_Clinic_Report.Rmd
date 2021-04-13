@@ -11,13 +11,13 @@ The following clinics were selected as potentials for new locations in NSW
 drive.values$add_clinic_table %>%
   # Remove the ID columns
   select(-ID) %>%
+  # Add Total Column
+  bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
   # Mask the columns
   mutate(
     Patients = mask.achd(Patients, "str"),
     ltf = mask.achd(ltf, "str")
   ) %>%
-  # Add Total Column
-  bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
   #Display the table nicely
             kbl(align=c('l','r','r'), # Centre the data
       # Nice Column Names
@@ -162,8 +162,8 @@ diff <- data.frame(
 
 # Add all the row together into 1 table
 clinic.compare <- rbind(clinic.compare.current, clinic.compare.new, diff) %>%
-                          mutate(hr_p = round(hr_p, digits = 2),
-                                 ltf_p = round(ltf_p, digits = 2),
+                          mutate(hr_p = round(hr_p * 100, digits = 2),
+                                 ltf_p = round(ltf_p * 100, digits = 2),
                                  avg_drive = round(avg_drive, digits = 2),
                                  long_drive = round(long_drive, digits = 2)
                                  )

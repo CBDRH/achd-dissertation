@@ -109,7 +109,7 @@ area.summary <- data.frame(
                                                    na.rm = TRUE),
                               ) %>% t()
                 ) %>%
-                mutate(p.area.hr = round(n.area.hr / no.areas, digits = 2),
+                mutate(p.area.hr = round(( n.area.hr / no.areas ) * 100, digits = 2),
                        avg.drive = round(avg.drive, digits = 2)) %>% #<hr areas as a percentage of total hours
                 select(no.areas, n.area.hr, p.area.hr, avg.drive)
 
