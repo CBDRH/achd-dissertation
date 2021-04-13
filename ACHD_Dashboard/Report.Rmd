@@ -32,6 +32,17 @@ library(kableExtra)
 ```
 
 ``` {r, include = FALSE, echo = FALSE}
+#function to mask ACHD area count data
+mask.achd <- function (data, type) {
+  if (type == "int") {
+    ifelse(data > 5, data, 5) 
+  } else if (type == "str") {
+    ifelse(data > 5, data, "<5")
+  } else { 
+    print("invalid string") 
+  }  
+}
+
 # the filtered achd data - not available in public version
 # achd <- achd.filtered()
 
