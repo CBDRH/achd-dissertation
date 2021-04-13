@@ -1,11 +1,30 @@
----
-title: "&nbsp;"
-output: html_document
----
 &nbsp;  
 &nbsp;  
 &nbsp; 
 
+```{css, echo=FALSE}
+<head>
+<style>
+div {
+  border: 3px solid #4CAF50;
+  padding: 5px;
+}
+
+.img1 {
+  float: right;
+}
+
+.clearfix::after {
+  content: "";
+  clear: both;
+  display: table;
+}
+
+</style>
+</head>
+```
+
+<div class = "clearfix">
 ## Area Focus 
 
 ``` {r, echo = FALSE}
@@ -13,9 +32,7 @@ output: html_document
 selected_areas <- drive.values$area_data %>% filter(SA2_5DIGIT %in% {{i}})
 ```
 
-<div style= "float:right;
-             position: relative;
-             ">
+<div class = "img1">
 ``` {r, echo = FALSE}
 area.polys <- subset(drive.polys(), drive.polys()$NAME16 %in% selected_areas$SA2_NAME)
 
@@ -68,17 +85,17 @@ HTML(paste(
             <br><br>
             <b>Selected Areas:</b> ", paste(selected_areas$SA2_NAME, collapse = ', '), "<br>
             <br>
-            <b>Number of ACHD Patients:</b> ", sum(selected_areas$ACHD_count),"<br>
+            <b>Number of ACHD Patients:</b> ", mask.achd(sum(selected_areas$ACHD_count), 'str'),"<br>
             <br>
             <b>Number with:</b> <br>
             <ul>
-              <li>Simple CHD: ",sum(selected_areas$beth_1),"</li>
-              <li>Moderate CHD: ",sum(selected_areas$beth_2),"</li> 
-              <li>Complex CHD: ",sum(selected_areas$beth_3),"</li>
+              <li>Simple CHD: ",mask.achd(sum(selected_areas$beth_1), 'str'),"</li>
+              <li>Moderate CHD: ",mask.achd(sum(selected_areas$beth_2), 'str'),"</li> 
+              <li>Complex CHD: ",mask.achd(sum(selected_areas$beth_3), 'str'),"</li>
             </ul>
             <b>Number of Patients lost to follow up:</b><br> 
             <ul>
-              <li>",sum(selected_areas$ltf_3),"</li>
+              <li>",mask.achd(sum(selected_areas$ltf_3), 'str'),"</li>
             </ul>
             <b>Index of Relative Socio-economic Disadvantage</b><br>
               (1 = most disadvantaged, 10 = least disadvantaged): <br>
@@ -111,7 +128,7 @@ HTML(paste(
                  paste("<li>",selected_areas$SA2_NAME,":</li>  
                  <ul>
                     <li>Current Locations: ", 
-                    round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% {{i}}], 'hours'), 
+                    round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% drive.values$map.clicks], 'hours'), 
                     digits = 2)," hrs</li>
                     <li>New Locations: ", 
                     round(as.numeric(selected_areas$shortest_time, 'hours'), digits = 2)," hrs</li>
@@ -120,5 +137,7 @@ HTML(paste(
             ")
             )
 ```
+</div>
+
 </div>
 

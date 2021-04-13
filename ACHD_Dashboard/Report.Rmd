@@ -32,17 +32,6 @@ library(kableExtra)
 ```
 
 ``` {r, include = FALSE, echo = FALSE}
-#function to mask ACHD area count data
-mask.achd <- function (data, type) {
-  if (type == "int") {
-    ifelse(data > 5, data, 5) 
-  } else if (type == "str") {
-    ifelse(data > 5, data, "<5")
-  } else { 
-    print("invalid string") 
-  }  
-}
-
 # the filtered achd data - not available in public version
 # achd <- achd.filtered()
 
@@ -120,7 +109,8 @@ area.summary <- data.frame(
                                                    na.rm = TRUE),
                               ) %>% t()
                 ) %>%
-                mutate(p.area.hr = percent(n.area.hr / no.areas) ) %>% #<hr areas as a percentage of total hours
+                mutate(p.area.hr = round(n.area.hr / no.areas, digits = 2),
+                       avg.drive = round(avg.drive, digits = 2)) %>% #<hr areas as a percentage of total hours
                 select(no.areas, n.area.hr, p.area.hr, avg.drive)
 
 row.names(area.summary) <- c("All", "Greater Sydney", "Rest of NSW", "ACT")
@@ -131,10 +121,10 @@ Areas are the Statistical Area 2 (SA2) geographical boundaries, defined by the A
 ``` {r, echo = FALSE}
 # Display the Table Nicely
 area.summary %>%
-  kbl(align=rep('c', 4), # Centre the data
+  kbl(align=rep('r', 4), # Centre the data
       # Add nice Column Names
-      col.names = c("No. Areas",
-                  "Areas < 1hr",
+      col.names = c("Areas (n)",
+                  "Areas < 1hr (n)",
                   "Areas < 1hr (%)",
                   "Avg Drive Time (hr)"),
       # Table caption
@@ -237,23 +227,23 @@ current_map_data <- subset(current_map_data, current_map_data$GCC_NAME16 %in% in
 current_pal_drive <- colorNumeric("YlOrRd", domain = as.numeric(current_map_data$shortest_time, 'hours'))
 
 # Set colour palette from current map data - layout overlay
-current_pal_loc <- colorNumeric("YlOrRd", domain = current_map_data$ACHD_count)
+current_pal_loc <- colorNumeric("YlOrRd", domain = mask.achd(current_map_data$ACHD_count, 'int'))
 
 # Labels for area mouse over
 current_labels <- sprintf(
             "<strong>%s</strong><br/>
-            %i ACHD patients<br/>
-            Simple: %i | Moderate: %i | Severe: %i<br/>
+            %s ACHD patients<br/>
+            Simple: %s | Moderate: %s | Severe: %s<br/>
             %.1f hr drive to nearest clinic<br/>",
             current_map_data$NAME16, 
-            current_map_data$ACHD_count,
-            current_map_data$beth_1, current_map_data$beth_2, current_map_data$beth_3,
+            mask.achd(current_map_data$ACHD_count, 'str'),
+            mask.achd(current_map_data$beth_1, 'str'), mask.achd(current_map_data$beth_2, 'str'), mask.achd(current_map_data$beth_3, 'str'),
             as.numeric(current_map_data$shortest_time, 'hours')
             ) %>% 
                 lapply(htmltools::HTML)
 ```
 
-``` {r, echo = FALSE, fig.width=13, fig.height=10}
+``` {r, echo = FALSE, fig.width=13, fig.height=10, warning = FALSE, message = FALSE}
 # Map showing the number of ACHD patients in each location
 leaflet() %>%
             addTiles() %>%
@@ -261,7 +251,7 @@ leaflet() %>%
             addPolygons(
                     data = current_map_data,
                     layerId = ~CODE16,
-                    fillColor = ~current_pal_loc(current_map_data$ACHD_count),
+                    fillColor = ~current_pal_loc(mask.achd(current_map_data$ACHD_count, 'int')),
                     weight = 1,
                     opacity = 1,
                     color = "white",
@@ -313,7 +303,7 @@ clinic.matches <- data.frame(
                  "Royal Prince Alfred Hospital",
                  "Westmead Private Hospital"
                 ),
-  distance = c("1.1kms", "1.2kms", "8 kms", "0.5 kms", "0 kms", "0 kms")
+  distance = c("1.1", "1.2", "8", "0.5", "0", "0")
 )
 ```
 
@@ -321,11 +311,11 @@ clinic.matches <- data.frame(
 ``` {r, echo = FALSE}
 # Display the table nicely
 clinic.matches %>%
-  kbl(align=rep('c', 3), # Centre the data
+  kbl(align=c('l','l','r'), # Centre the data
       # Add nice column name
       col.names = c("Current ACHD Clinics",
                   "Closest HTT Clinics",
-                  "Distance between"),
+                  "Distance between (kms)"),
       # Caption for the table
       caption = "<b>Table 3</b>: Matching current ACHD clinics to Hospital 
                  Travel Time (HTT) Clincis") %>%
@@ -342,11 +332,11 @@ drive.values$current_clinic_table %>%
   # Add Total Column
   bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
   #Display the table nicely
-            kbl(align=rep('c', 3), # Centre the data
+            kbl(align=c('l','r','r'), # Centre the data
       # Nice Column Names
       col.names = c("Current ACHD Clinics",
-                  "Patient within 1hr",
-                  "Lost to F/up within 1hr"),
+                  "Patient within 1hr (n)",
+                  "Lost to F/up within 1hr (n)"),
       # Table Caption
       caption = "<b>Table 4</b>: Number of patients captured by each hospital") %>%
   kable_classic_2(full_width = F, position = "left",

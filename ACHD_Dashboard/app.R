@@ -54,6 +54,17 @@ new_achd_ids <- achd_ids
 #Import area polygons
 sa2.polys <- readOGR("./data/ASGS/sa2/sa2_polys.shp")
 
+#function to mask ACHD area count data
+mask.achd <- function (data, type) {
+  if (type == "int") {
+    ifelse(data > 5, data, 5) 
+  } else if (type == "str") {
+    ifelse(data > 5, data, "<5")
+  } else { 
+    print("invalid string") 
+  }  
+}
+
 ############################# HEADER CONTENT #######################################
 
 header <- dashboardHeader(title = "Clinic Planning Tool")
@@ -64,8 +75,6 @@ sidebar <- dashboardSidebar(
     sidebarMenu(
         # Welcome Page
         menuItem("Welcome", tabName = "welcome", icon = icon("info")),
-        # Snapshot tab
-        menuItem("Snapshot of ACHD", tabName = "snapshot", icon = icon("file-medical")),
         # Driving tab
         menuItem("Clinic Planning", tabName = "driving", icon = icon("map-marker-alt")),
         
@@ -98,20 +107,11 @@ body <- dashboardBody(
                   # Title bar
                   valueBox("Clinic Planning in Adult Congenital Heart Disease",
                            "Combining geographic information systems, census data and patient information to determine
-                           appropraite clinic locations in NSW",
-                           width = 10,
+                           appropriate clinic locations in NSW",
+                           width = 12,
                            color = 'olive'),
-                  tags$head(tags$style(make_css(list('.btn', 'white-space', 'pre-wrap')))),
-                  
-                  # Button to load patient data
-                  actionButton('load.data', 
-                               HTML("Load Patient Data"),
-                               style ="display:block;
-                                       height: 102px;
-                                       width: 175px;
-                                       border: 2px solid black;
-                                       font-size: 200%;" )
-                ),
+                  tags$head(tags$style(make_css(list('.btn', 'white-space', 'pre-wrap'))))
+                  ),
                 
                 # Introduction and background information
                 fluidRow(
@@ -222,39 +222,6 @@ body <- dashboardBody(
                     
                     
                   )
-                )
-        ),
-        
-        ############################# Snapshot Tab ################################
-        tabItem(tabName = "snapshot",
-                #Title bar
-                fluidRow(
-                  valueBox("Snapshot of ACHD Patients in NSW",
-                           "An overview of the ACHD patients in NSW; 
-                                 Their basic demographics, what diagnoses they and how many?",
-                           width = 12,
-                           color = 'olive')
-                ),
-                
-                # Summary Values
-                fluidRow(valueBoxOutput('pt.count.ss', width = 3),
-                         valueBoxOutput('simple.count.ss', width = 3),
-                         valueBoxOutput('moderate.count.ss', width = 3),
-                         valueBoxOutput('complex.count.ss', width = 3)
-                ),
-                
-                # Plots
-                fluidRow(uiOutput("age_box"),
-                         uiOutput("ltf_box")
-                ),
-                fluidRow(
-                  box(uiOutput("sex_box"), width = 4),
-                  box(uiOutput("ndx_box"), width = 4),
-                  box(uiOutput("nclinic_box"), width = 4)
-                ),
-                fluidRow(
-                  uiOutput("dx_box")
-                  
                 )
         ),
         
@@ -388,7 +355,8 @@ server <- function(input, output) {
     # Join achd area data to table builer data
     area.drive <- left_join(sa2.TB, achd, by = 'SA2_NAME') %>%
         mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
-        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+        mutate(ACHD_count = ifelse(is.na(ACHD_count), 5, ACHD_count)) %>% # mask nas to 5 because all <5 areas are masked to 5
+        mutate_at(c('beth_1', 'beth_2', 'beth_3', 'beth_4',
                     'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
     
     area.drive
@@ -501,149 +469,6 @@ server <- function(input, output) {
                         round = TRUE)
         })
     })
-    
-############################# SNAPSHOTS TAB #################################
-    
-    ############################# Value Boxes #################################
-    # Value boxes with calcuclated with achd area data instead of filtered patient data
-    
-    output$pt.count.ss <- renderValueBox({
-      valueBox(sum(drive.area.achd()$ACHD_count),
-               'selected patients', 
-               width = 3, color = 'light-blue')
-    })
-    output$simple.count.ss <- renderValueBox({
-      valueBox(sum(drive.area.achd()$beth_1), 
-               "Patients with Simple CHD", 
-               color = 'light-blue')
-    })
-    output$moderate.count.ss <- renderValueBox({
-      valueBox(sum(drive.area.achd()$beth_2), 
-               "Patients with Moderate CHD", 
-               color = 'light-blue')
-    })
-    output$complex.count.ss <- renderValueBox({
-      valueBox(sum(drive.area.achd()$beth_3), 
-               "Patients with Complex CHD", 
-               color = 'light-blue')
-    })
-    
-    
-    ############################# Plotting ########################
-    # Age histogram
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$age_box <- renderUI({
-                       box(plotOutput("age_plot",
-                                      height = 200))
-                     })
-                   })
-#    output$age_plot <- renderPlot({
-#      ggplot(achd.filtered(), aes(x=as.numeric(age, "years"))) +
-#        geom_histogram(fill = "light grey", color = "black") +
-#        labs(y = "Number of Patients", 
-#             x = "Age (yrs)") +
-#        theme(axis.title.x=element_blank()) +
-#        theme_minimal()
-#    })
-    
-    # Time since last clinic plot
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$ltf_box <- renderUI({
-                       box(plotOutput("ltf_plot",
-                                      height = 200))
-                     })
-                   })
-#    output$ltf_plot <- renderPlot({
-#      ggplot(achd.filtered(), aes(x=as.numeric(gap_2000, "years"))) +
-#        geom_histogram(fill = "light grey", color = "black") +
-#        labs(y = "Number of Patients", 
-#             x = "Time since last clinic visit (yrs)") +
-#        theme(axis.title.x=element_blank()) +
-#        theme_minimal()
-#    })
-    
-    
-    # Sex bar plot
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$sex_box <- renderUI({
-                       plotOutput("sex_plot",
-                                  height = 200)
-                       
-                     })
-                   })
-#    output$sex_plot <- renderPlot ({
-#      achd.filtered() %>% filter(!is.na(sex)) %>%
-#        ggplot(aes(x=sex)) +
-#        geom_bar(fill = "light grey", color = "black") +
-#        scale_x_discrete(name = "Sex",
-#                         labels=c("1" = "Male", "2" = "Female",
-#                                  "4" =  "Neither Female or Male")) +
-#        labs(y = "Number of Patients") +
-#        theme(axis.title.x=element_blank()) +
-#        theme_minimal()
-#    })
-    
-    # Number of Diagnoses
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$ndx_box <- renderUI({
-                       plotOutput("ndx_plot",
-                                  height = 200)
-                     })
-                   })
-#    output$ndx_plot <- renderPlot ({
-#      ggplot(achd.filtered(), aes(x=as.integer(no_dx)) ) +
-#        geom_bar(fill = "light grey", color = "black") +
-#        scale_x_continuous() +
-#        labs(x = "Number of Diagnoses", 
-#             y = "Number of Patients") +
-#        theme() +
-#        theme_minimal() 
-#    })
-    
-    
-    # Number of Clinic Visits
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$nclinic_box <- renderUI({
-                       plotOutput("nclinic_plot",
-                                  height = 200)
-                     })
-                   })
-#    output$nclinic_plot <- renderPlot ({
-#      ggplot(achd.filtered(), aes(x=no_clinics_2000)) +
-#        geom_bar(fill = "light grey", color = "black") +
-#        scale_x_continuous() +
-#        labs(x = "Number of Clinic Visits", 
-#             y = "Number of Patients") +
-#        theme() +
-#        theme_minimal() 
-#    })
-    
-    ### Frequency of Diagnoses
-    observeEvent(c(input$sb.update,
-                   input$load.data), ignoreInit = T, {
-                     output$dx_box <- renderUI({
-                       div(style = 'overflow-y:scroll;height:500px;',
-                           box(plotOutput("dx_plot", height = 1500), 
-                               width = 12, height = 1500)
-                       )
-                     })
-                   })
-#    output$dx_plot <- renderPlot({
-#      dx.count() %>% filter(dx_count > 0) %>% 
-#        ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
-#        geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
-#        theme(axis.text.x = element_text(angle = 90)) +
-#        labs(title = "Frequecy of each diagnosis", 
-#             y = "count",
-#             x = "") +
-#        coord_flip() +
-#        theme_minimal()
-#    })
 
 ############################# DRIVING TAB #################################
  
@@ -665,10 +490,7 @@ server <- function(input, output) {
     
     ######################### Building the Current Clinics Table ####################
     
-    observeEvent(
-      
-      c(input$sb.update,
-        input$load.data), ignoreInit = T, # Triggers on either load data, or update filters
+    observe(
       
       {
     
@@ -753,12 +575,15 @@ server <- function(input, output) {
       
       # Add the new row to the clinic table, if it wasnt already selected
       if ( !(input$hospital %in% isolate(drive.values$add_clinic_table$Hospital)) )
-      { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
+      { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row))}
       
       # Display the new clinics table
       output$new.clinics.output <- renderUI({
         output$new.clinics.table <- renderTable(drive.values$add_clinic_table %>%
-                                                    select(-ID)) # Do not need to display the Hospital ID number
+                                                    select(-ID) %>% # Do not need to display the Hospital ID number
+                                                    mutate(Patients = mask.achd(Patients, 'str'), #mask value for low
+                                                           ltf = mask.achd(ltf, 'str'))
+                                                ) 
         tableOutput("new.clinics.table")
       })
       
@@ -967,12 +792,12 @@ server <- function(input, output) {
     labels.drive <- eventReactive(input$drive.update, {
         sprintf(
             "<strong>%s</strong><br/>
-            %i ACHD patients<br/>
-            Simple: %i | Moderate: %i | Severe: %i<br/>
+            %s ACHD patients<br/>
+            Simple: %s | Moderate: %s | Severe: %s<br/>
             %.1f hr drive to nearest clinic<br/>",
             drive.polys()$NAME16, 
-            drive.polys()$ACHD_count,
-            drive.polys()$beth_1, drive.polys()$beth_2, drive.polys()$beth_3,
+            mask.achd(drive.polys()$ACHD_count,'str'),
+            mask.achd(drive.polys()$beth_1, 'str'), mask.achd(drive.polys()$beth_2, 'str'), mask.achd(drive.polys()$beth_3, 'str'),
             as.numeric(drive.polys()$shortest_time, 'hours')
             ) %>% 
                 lapply(htmltools::HTML)
@@ -1145,17 +970,17 @@ server <- function(input, output) {
             <br><br>
             <b>Selected Areas:</b> ", paste(drive.values$event_area$SA2_NAME, collapse = ', '), "<br>
             <br>
-            <b>Number of ACHD Patients:</b> ", sum(drive.values$event_area$ACHD_count),"<br>
+            <b>Number of ACHD Patients:</b> ", mask.achd(sum(drive.values$event_area$ACHD_count), 'str'),"<br>
             <br>
             <b>Number with:</b> <br>
             <ul>
-              <li>Simple CHD: ",sum(drive.values$event_area$beth_1),"</li>
-              <li>Moderate CHD: ",sum(drive.values$event_area$beth_2),"</li> 
-              <li>Complex CHD: ",sum(drive.values$event_area$beth_3),"</li>
+              <li>Simple CHD: ",mask.achd(sum(drive.values$event_area$beth_1), 'str'),"</li>
+              <li>Moderate CHD: ",mask.achd(sum(drive.values$event_area$beth_2), 'str'),"</li> 
+              <li>Complex CHD: ",mask.achd(sum(drive.values$event_area$beth_3), 'str'),"</li>
             </ul>
             <b>Number of Patients lost to follow up:</b><br> 
             <ul>
-              <li>",sum(drive.values$event_area$ltf_3),"</li>
+              <li>",mask.achd(sum(drive.values$event_area$ltf_3), 'str'),"</li>
             </ul>
             <b>Index of Relative Socio-economic Disadvantage</b><br>
               (1 = most disadvantaged, 10 = least disadvantaged): <br>
