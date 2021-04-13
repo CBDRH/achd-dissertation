@@ -115,8 +115,8 @@ pt.summary <- data.frame(
                                                       hr.complex = sum(beth_3) # Complex CHD
                                                     ) %>% t()
                           ) %>% 
-                            mutate(ltf.percent = round( ltf.patient / no.patient, digits = 2 ), #LTF patients as a percentage of all patients
-                                   hr.percent = round( hr.patient / no.patient, digits = 2 )) %>% #<hr patients as a perc of all patients
+                            mutate(ltf.percent = round( ( ltf.patient / no.patient ) * 100, digits = 2 ), #LTF patients as a percentage of all patients
+                                   hr.percent = round( ( hr.patient / no.patient ) * 100, digits = 2 )) %>% #<hr patients as a perc of all patients
                             select(no.patient, ltf.percent, hr.percent)
 
 row.names(pt.summary) <- c("All", "Simple CHD", "Moderate CHD", "Complex CHD")
@@ -254,7 +254,7 @@ area.summary <- data.frame(
                                                    na.rm = TRUE),
                               ) %>% t()
                 ) %>%
-                mutate(p.area.hr = round(n.area.hr / no.areas, digits = 2),
+                mutate(p.area.hr = round( ( n.area.hr / no.areas ) * 100, digits = 2),
                        avg.drive = round(avg.drive, digits = 2)) %>% #<hr areas as a percentage of total hours
                 select(no.areas, n.area.hr, p.area.hr, avg.drive)
 

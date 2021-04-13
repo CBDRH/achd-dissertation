@@ -153,8 +153,8 @@ diff <- data.frame(
 
 # Add all the row together into 1 table
 clinic.compare <- rbind(clinic.compare.current, clinic.compare.new, diff) %>%
-                          mutate(hr_p = round(hr_p, digits = 2),
-                                 ltf_p = round(ltf_p, digits = 2),
+                          mutate(hr_p = round(hr_p * 100, digits = 2),
+                                 ltf_p = round(ltf_p * 100, digits = 2),
                                  avg_drive = round(avg_drive, digits = 2),
                                  long_drive = round(long_drive, digits = 2)
                                  )
