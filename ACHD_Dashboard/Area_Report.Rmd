@@ -33,27 +33,6 @@ selected_areas <- drive.values$area_data %>% filter(SA2_5DIGIT %in% {{i}})
 ```
 
 <div class = "img1">
-``` {r, echo = FALSE}
-area.polys <- subset(drive.polys(), drive.polys()$NAME16 %in% selected_areas$SA2_NAME)
-
-# Map highlighting the selected area
-leaflet() %>%
-            addTiles() %>%
-            # Add Polygons
-            addPolygons(
-                data = area.polys,
-                layerId = ~CODE16,
-                color = 'black',
-                fill = 'white',
-                weight = 1,
-                highlight = highlightOptions(
-                        weight = 3),
-                label = area.polys$NAME16,
-                labelOptions = labelOptions(
-                        style = list("font-weight" = "normal", padding = "3px 8px"),
-                        textsize = "15px",
-                        direction = "auto"))
-```
 
 ``` {r, echo = FALSE, fig.width = 7}
 # Data of diagnoses present in area

@@ -287,4 +287,35 @@ polys$NAME16[polys$CODE16 == id]
                       position = "bottomright")
         
 
+``` {r}
+library(leaflet)
+library(mapview)
+library(here)
+
+m <- leaflet() %>% addTiles()
+
+## save html to png
+mapshot(m, file = 'test.png')
+
+```
+
+``` {r}
+## optionally display image when using knitr
+knitr::include_graphics('test.png')
+
+```
+
+``` {r}
+if ( !(webshot::is_phantomjs_installed()) ) { webshot::install_phantomjs() }
+
+
+```
+
+
+
+
+
+
+```
+
 

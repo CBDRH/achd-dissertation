@@ -15,14 +15,9 @@ library(scales)
 library(lubridate)
 library(ggplot2)
 library(ggpubr)
-library(rgdal)
-library(sp)
-library(sf)
-library(leaflet)
-library(leaflet.extras)
-library(tableHTML)
 library(knitr)
 library(kableExtra)
+library(tableHTML)
 ```
 
 ```{css, echo = FALSE}
@@ -40,6 +35,10 @@ area.achd <- drive.area.achd()
 
 # Diagnosis Frequency Data - This function is reliant on achd.filtered()
 # dx.data <- dx.count()
+
+# Test for phantomJS install (need for the mapshot to work)
+if ( !(webshot::is_phantomjs_installed()) ) { webshot::install_phantomjs() }
+
 ```
 
 
@@ -128,7 +127,7 @@ area.summary %>%
                   "Areas < 1hr (%)",
                   "Avg Drive Time (hr)"),
       # Table caption
-      caption = "<b>Table 2</b>: Number of areas within one hour drive
+      caption = "<b>Table 1</b>: Number of areas within one hour drive
                  to an ACHD clinic and the average driving time to ACHD clinics") %>%
   kable_classic_2(full_width = F, position = "left",
                   html_font = "Cambria",
@@ -137,7 +136,6 @@ area.summary %>%
 ```
 
 &nbsp;  
-&nbsp; 
 
 ``` {r, echo = FALSE, include = FALSE}
 # Function to build the driving times for each area plots
@@ -199,88 +197,17 @@ area_st_plot <- function() {
 ```
 
 &nbsp;  
-&nbsp;  
 
 ``` {r, echo = FALSE, warning = FALSE, message = FALSE}
 # Print the area driving times map
 area_st_plot()
 ```
 &nbsp;  
-__Figure 3:__ Distribution of the driving time from each SA2 area to the nearest ACHD clinic, for all of NSW,  
+__Figure 1:__ Distribution of the driving time from each SA2 area to the nearest ACHD clinic, for all of NSW,  
 the Greater Sydney Region, the Rest of NSW and the Australia Capital Territory
 
-### Distribution of the ACHD population
-The map below shows the number of ACHD patients in each area. Driving times are calculated from the centre of each area.
 
 &nbsp; 
-
-``` {r, echo = FALSE, include = FALSE}
-# Current map data is the data (polygons and area data) before new clinics are added. The data from the app will have been
-# editted with new clinics so we will need to rebuild the data as it was before it was editted
-
-# Filter the current map data by gcc region selected
-current_map_data <- merge(sa2.polys, area.achd, by.x = 'NAME16', by.y = 'SA2_NAME')
-# Add area demographics to the spatial information
-current_map_data <- subset(current_map_data, current_map_data$GCC_NAME16 %in% input$drive.gcc)
-
-# Set colour palette from current map data - driving overlay
-current_pal_drive <- colorNumeric("YlOrRd", domain = as.numeric(current_map_data$shortest_time, 'hours'))
-
-# Set colour palette from current map data - layout overlay
-current_pal_loc <- colorNumeric("YlOrRd", domain = mask.achd(current_map_data$ACHD_count, 'int'))
-
-# Labels for area mouse over
-current_labels <- sprintf(
-            "<strong>%s</strong><br/>
-            %s ACHD patients<br/>
-            Simple: %s | Moderate: %s | Severe: %s<br/>
-            %.1f hr drive to nearest clinic<br/>",
-            current_map_data$NAME16, 
-            mask.achd(current_map_data$ACHD_count, 'str'),
-            mask.achd(current_map_data$beth_1, 'str'), mask.achd(current_map_data$beth_2, 'str'), mask.achd(current_map_data$beth_3, 'str'),
-            as.numeric(current_map_data$shortest_time, 'hours')
-            ) %>% 
-                lapply(htmltools::HTML)
-```
-
-``` {r, echo = FALSE, fig.width=13, fig.height=10, warning = FALSE, message = FALSE}
-# Map showing the number of ACHD patients in each location
-leaflet() %>%
-            addTiles() %>%
-            # Add Polygons
-            addPolygons(
-                    data = current_map_data,
-                    layerId = ~CODE16,
-                    fillColor = ~current_pal_loc(mask.achd(current_map_data$ACHD_count, 'int')),
-                    weight = 1,
-                    opacity = 1,
-                    color = "white",
-                    dashArray = "3",
-                    fillOpacity = 0.7,
-                    highlight = highlightOptions(
-                        weight = 3,
-                        color = "#666",
-                        dashArray = "",
-                        fillOpacity = 0.7,
-                        bringToFront = TRUE),
-                    label = current_labels,
-                    labelOptions = labelOptions(
-                        style = list("font-weight" = "normal", padding = "3px 8px"),
-                        textsize = "15px",
-                        direction = "auto")) %>%
-                fitBounds(min(set_coords()$long),
-                          min(set_coords()$lat),
-                          max(set_coords()$long),
-                          max(set_coords()$lat)) %>%
-              # Add Legend
-              addLegend(pal = current_pal_loc, 
-                          values = current_map_data$ACHD_count, 
-                          opacity = 0.7, 
-                          title = "ACHD population",
-                          position = "bottomright")
-
-```
-
 
 ## Current ACHD Clinics in NSW
 
@@ -317,7 +244,7 @@ clinic.matches %>%
                   "Closest HTT Clinics",
                   "Distance between (kms)"),
       # Caption for the table
-      caption = "<b>Table 3</b>: Matching current ACHD clinics to Hospital 
+      caption = "<b>Table 2</b>: Matching current ACHD clinics to Hospital 
                  Travel Time (HTT) Clincis") %>%
   kable_classic_2(full_width = F, position = "left",
                   html_font = "Cambria",
@@ -338,65 +265,10 @@ drive.values$current_clinic_table %>%
                   "Patient within 1hr (n)",
                   "Lost to F/up within 1hr (n)"),
       # Table Caption
-      caption = "<b>Table 4</b>: Number of patients captured by each hospital") %>%
+      caption = "<b>Table 3</b>: Number of patients captured by each hospital") %>%
   kable_classic_2(full_width = F, position = "left",
                   html_font = "Cambria",
                   font_size = 16) 
-```
-
-&nbsp;  
-
-### Average Driving time to ACHD Clinics  
-The map below details the driving time from each SA2 area in NSW to the nearest ACHD Clinic. Driving times are calculated from the centre of each area.
-
-&nbsp;  
-
-``` {r, echo = FALSE, fig.width=13, fig.height=10}
-# Remove NAs from legend
-leg_data <- current_map_data@data %>% filter(!is.na(shortest_time))
-
-# Map showing the driving times to clinics - current clinics only
-leaflet() %>%
-            addTiles() %>%
-            addAwesomeMarkers(
-                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
-                lng = ~Longitude,
-                lat = ~Latitude,
-                label = ~Hospital.name,
-                icon = ~HospitalIcons["Current"]) %>%
-            # Add Polygons
-            addPolygons(
-                data = drive.polys(),
-                layerId = ~CODE16,
-                fillColor = ~current_pal_drive(as.numeric(current_map_data$shortest_time, 'hours')),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = current_labels,
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-                fitBounds(min(set_coords()$long),
-                          min(set_coords()$lat),
-                          max(set_coords()$long),
-                          max(set_coords()$lat)) %>%
-                # Add Legend
-                addLegend(pal = current_pal_drive, 
-                          values = as.numeric(leg_data$shortest_time, 'hours'), 
-                          opacity = 0.7, 
-                          title = "Driving time (hrs)",
-                          position = "bottomright",
-                          layerId = 'drive.legend')
-
 ```
 
 &nbsp;  
@@ -427,3 +299,7 @@ if ( !is.null(drive.values$area.report.list) ) {
         
   }
 ```
+
+
+
+
