@@ -64,8 +64,7 @@ prepare.area.data <- function(achd_data) {
 
 ``` {r}
 achd.area <- prepare.area.data(achd) %>%
-                rename("SA2_NAME" = sa2) %>%
-                mutate(ACHD_count = ifelse(ACHD_count > 5, ACHD_count, 5))
+                rename("SA2_NAME" = sa2)
 
 ```
 
