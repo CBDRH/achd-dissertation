@@ -356,8 +356,7 @@ server <- function(input, output) {
     # Join achd area data to table builer data
     area.drive <- left_join(sa2.TB, achd, by = 'SA2_NAME') %>%
         mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
-        mutate(ACHD_count = ifelse(is.na(ACHD_count), 5, ACHD_count)) %>% # mask nas to 5 because all <5 areas are masked to 5
-        mutate_at(c('beth_1', 'beth_2', 'beth_3', 'beth_4',
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
                     'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
     
     area.drive
