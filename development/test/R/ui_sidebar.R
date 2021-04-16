@@ -1,4 +1,0 @@
-sidebarUI <- function(id) {
-  
-  
-}
