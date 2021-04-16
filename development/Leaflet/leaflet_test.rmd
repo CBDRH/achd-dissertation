@@ -20,7 +20,7 @@ library(leaflet.extras)
 library(ggplot2)
 library(tidyverse)
 
-ACHD_path <- '/Users/calumnicholson/Documents/work/HRI/OneDrive - Heart Research Institute/To Do/'
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
 ```
 
 ```{r}
