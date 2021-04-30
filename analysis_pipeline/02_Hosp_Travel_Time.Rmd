@@ -48,6 +48,12 @@ htt_details <- read.csv('./input/myhospitals-contact-details.csv') %>%
                        Suburb = replace(Suburb, Hospital.name == 'Illawarra Mental Health Services', 'WOLLONGONG'),
                        Postcode = replace(Postcode, Suburb == 'MACQUARIE UNIVERSITY', 2113),
                        Postcode = replace(Postcode, Suburb == 'CHATSWOOD', 2067),
+                       Hospital.name = replace(Hospital.name, 
+                                               Hospital.name == "St Vincent<92>s Hospital [Darlinghurst]", 
+                                               "St Vincents Hospital [Darlinghurst]"),
+                       Hospital.name = replace(Hospital.name, 
+                                               Hospital.name == "St Vincent's Private Sydney", 
+                                               "St Vincents Private Sydney")
                     ) %>%
                     #add ASGS area deatils to each hospital
                     left_join(asgs_lookup, by = c("Suburb" = "LOCALITY_NAME", 

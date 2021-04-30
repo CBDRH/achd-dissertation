@@ -9,18 +9,10 @@ rmarkdown::render(here('analysis_pipeline',"01_ASGS_Lookup.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"02_Hosp_Travel_Time.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"03_SA2_Demographics.Rmd"))
 rmarkdown::render(here('analysis_pipeline',"04_ASGS_Boundaries.Rmd"))
-# Step 5 will only run wit access to patient data (at RPAH only)
-rmarkdown::render(here('analysis_pipeline',"05_ACHD_database.Rmd"))
 
 
 # Copy the required analysis pipeline outputs into the Shiny App data folder
 dir.create(here('ACHD_Dashboard', 'data'))
-
-# ACHD to EPCC coding index
-file.copy(here("analysis_pipeline", "input", "ACHD_EPCC_coding.csv"),
-          here("ACHD_Dashboard", "data", "ACHD_EPCC_coding.csv"),
-          overwrite = FALSE
-)
 
 # SA2 area demographics
 file.copy(here("analysis_pipeline", "output", "sa2_demographics.rds"),
