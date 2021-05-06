@@ -9,6 +9,7 @@
 
 library(shiny)
 library(shinydashboard)
+library(shinyWidgets)
 library(tidyverse)
 library(scales)
 library(lubridate)
@@ -20,6 +21,8 @@ library(leaflet)
 library(leaflet.extras)
 library(tableHTML)
 library(here)
+
+
 ################################## LOAD DATA ############################################
 #import Census data
 sa2.TB <- readRDS(file = here("ACHD_Dashboard", "data", "sa2_demographics.rds")) %>%
@@ -177,25 +180,56 @@ body <- dashboardBody(
                                          selected = c("Greater Sydney", "Rest of NSW", "Australian Capital Territory")),
                       
                       # Select Map Overlay
-                      selectInput("select.overlay", "Select area overlay:",
-                                  choices = c("Boundaries Only" = "blank.overlay",
-                                              "IRSD (Disadvantage)" = "irsd.overlay",
-                                              "Aboriginal and Torres Strait Islander Population" = "atsi.overlay",
-                                              "Driving Time to Nearest Clinic" = "drive.overlay"
-                                              ),
-                                  selected = c("Boundaries Only" = "blank.overlay")),
+                      uiOutput('overlay.selector'),
                       actionButton("drive.update", "Update"),
                       width = 4, height = 340
                   ),
                   
                   # Selecting New Clinics
-                  box(title = "New Clinic Selection",
-                      uiOutput('phn.selector'), # Primary Health Network
-                      uiOutput('lhn.selector'), # Local Health Network
-                      uiOutput('hospital.selector'), # Hospital
-                      div(style="display:inline-block",uiOutput('clinic.button.add')), # Add hospital to list
-                      div(style="display:inline-block",uiOutput('clinic.button.reset')), # Reset list
-                      width = 4, height = 340
+                  tabBox(title = NULL,
+                         tabPanel("Select Hospitals by location",
+                                  uiOutput('phn.selector'), # Primary Health Network
+                                  uiOutput('lhn.selector'), # Local Health Network
+                                  uiOutput('hospital.selector'), # Hospital
+                                  # Add hospital to new clinics list
+                                  div(style="display:inline-block",uiOutput('clinic.button.add')),
+                                  # Reset Clinics
+                                  div(style="display:inline-block",uiOutput('clinic.button.reset')),
+                         ),
+                         tabPanel("Filter Hospitals by Type",
+                                  pickerInput(
+                                    inputId = 'description.filter',
+                                    label = 'Filter Hospitals by Description',
+                                    choices = unique(htt.details$Description),
+                                    options = list(
+                                      `actions-box` = TRUE,
+                                      `live-search` = TRUE,
+                                      `selected-text-format` = "count > 3"), 
+                                    multiple = TRUE
+                                  ),
+                                  pickerInput(
+                                    inputId = 'sector.filter',
+                                    label = 'Filter Hospitals by Sector',
+                                    choices = unique(htt.details$Sector),
+                                    options = list(
+                                      `actions-box` = TRUE), 
+                                    multiple = TRUE
+                                  ),
+                                  pickerInput(
+                                    inputId = 'beds.filter',
+                                    label = 'Filter Hospitals by Number of Beds',
+                                    choices = unique(htt.details$Beds),
+                                    options = list(
+                                      `actions-box` = TRUE,
+                                      `selected-text-format` = "count > 3"), 
+                                    multiple = TRUE
+                                  ),
+                                  # Add hospital to new clinics list
+                                  div(style="display:inline-block",actionButton("filter.add", "Add Clinics")),
+                                  # Reset Clinics
+                                  div(style="display:inline-block",actionButton("filter.reset", "Reset Clinics")), # Reset list
+                         ),
+                         width = 4, height = 340
                   ),
                   
                   # Information about Hospital Coverage
@@ -234,28 +268,32 @@ server <- function(input, output) {
  
     ######################### Reactive Values for Driving Map #############
     drive.values <- reactiveValues()
-    #For creating and editing the clinics table
+    # For creating and editing the clinics table
     drive.values$add_clinic_table <- data.frame(Hospital = as.character(),
                                                 ID = as.character(),
                                                 stringsAsFactors = FALSE)
-    #For tracking the ACHD clinic IDs selected
+    # For tracking the current clinic IDs
+    drive.values$current_clinic_ids <- c()
+    # For tracking the new clinic IDs selected
     drive.values$new_clinic_ids <- c()
-    #For adding new areas for report summary
+    # For adding new areas for report summary
     drive.values$area.report.list <- list()
-    #For the area level data
+    # For the area level data
     observe({ drive.values$area_data <- sa2.TB })
-    #To store map clicks
+    # To store map clicks
     drive.values$map.clicks <- c()
     
-    ######################### When 'Add Clinic' Button is clicked ####################
-    observeEvent(input$drive.add, {
-      
+    ######################### When 'Add Clinic' Button is clicked in the location selector ####################
+    observeEvent(input$location.add, {
+        
       # The hospital ID that was selected
       hospital_id <- htt.details$Hospital_ID[htt.details$Hospital.name == input$hospital]
       
       # Add the new hospital id to the clinics id list
-      if ( !(hospital_id %in% isolate(drive.values$new_clinic_ids)) ) 
-      { isolate(drive.values$new_clinic_ids <- append(drive.values$new_clinic_ids, hospital_id)) }
+      if ( !(hospital_id %in% drive.values$new_clinic_ids) ) 
+      { drive.values$new_clinic_ids <- append(drive.values$new_clinic_ids, hospital_id) }
+      
+      print(drive.values$new_clinic_ids)
       
       # Use the new clinics id list to calculate the driving time to the nearest hospital
       shortest_time_new <- htt.nsw %>%
@@ -275,8 +313,6 @@ server <- function(input, output) {
       # Add the new shortest dirving time column into the area data
       drive.values$area_data <- drive.values$area_data %>%
         left_join(shortest_time_new, by = "SA2_5DIGIT")
-      
-      print(names(drive.values$area_data))
       
       # Get driving information for selected hospital
       selected_hospital <- htt.nsw %>%
@@ -306,6 +342,71 @@ server <- function(input, output) {
       
     })
     
+    ######################### When 'Add Clinic' Button is clicked in the filter selector ####################
+    observeEvent(input$filter.add, {
+      print(input$description.filter)
+      print(input$sector.filter)
+      print(input$beds.filter)
+      
+      htt.details.fitlered <- htt.details %>% { if( !(is.null(input$description.filter) ) ) filter(., Description %in% input$description.filter) else . } %>% 
+                      { if( !(is.null(input$sector.filter) ) ) filter(., Sector %in% input$sector.filter) else . } %>%
+                      { if( !(is.null(input$beds.filter) ) ) filter(., Beds %in% input$beds.filter) else . }
+      
+      drive.values$new_clinic_ids <- append(drive.values$new_clinic_ids, 
+                                            htt.details.fitlered$Hospital_ID[!(htt.details.fitlered$Hospital_ID %in% 
+                                                                               drive.values$new_clinic_ids)])
+      
+      # Use the new clinics id list to calculate the driving time to the nearest hospital
+      shortest_time_new <- htt.nsw %>%
+        select(SA2_5DIGIT, as.character(drive.values$new_clinic_ids)) %>%
+        mutate(shortest_time = pmap_dbl(
+          .l = select(., -SA2_5DIGIT),
+          .f = function(...) min(...)),
+          shortest_time = duration(shortest_time, "seconds")) %>%
+        select(SA2_5DIGIT, shortest_time)
+      
+      # Remove the previous shortest_time column, if it already exists
+      if ("shortest_time" %in% colnames(drive.values$area_data)) {
+        drive.values$area_data <- drive.values$area_data %>%
+          select(-shortest_time)
+      }
+      
+      # Add the new shortest dirving time column into the area data
+      drive.values$area_data <- drive.values$area_data %>%
+        left_join(shortest_time_new, by = "SA2_5DIGIT")
+      
+    })
+    
+    ######################### Build and display the selected clinics table ####################
+    observeEvent({ input$location.add
+                   input$filter.add }, {  
+      # Get driving information for selected hospital
+      selected_hospitals <- htt.nsw %>%
+        select(SA2_5DIGIT, as.character(drive.values$new_clinic_ids)) %>%
+        mutate(hospital = as.duration(.[[as.character(hospital_id)]])) %>%
+        left_join(drive.values$area_data, by ='SA2_5DIGIT') %>%
+        select(hospital, SA2_NAME, SA2_5DIGIT)
+      
+      # New row to add to clinic table
+      new.row <- isolate(data.frame(
+        # Hospital Name
+        Hospital = input$hospital,
+        # Hospital ID
+        ID = hospital_id,
+        stringsAsFactors = FALSE))
+      
+      # Add the new row to the clinic table, if it wasnt already selected
+      if ( !(input$hospital %in% isolate(drive.values$add_clinic_table$Hospital)) )
+      { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
+      
+      # Display the new clinics table
+      output$new.clinics.output <- renderUI({
+        output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
+        tableOutput("new.clinics.table")
+      })
+      
+    })
+    
     ######################### When 'Reset Clinics' Button is clicked ####################
     observeEvent(input$drive.clinic.reset, {
       
@@ -324,6 +425,32 @@ server <- function(input, output) {
       # Reset the area data
       drive.values$area_data <- sa2.TB
     })
+    
+    ######################### UI for map customisation ###################################
+    # map overlay selector when no clinics are chosen
+    output$overlay.selector <- renderUI({
+      
+      # If no clinics have been selected
+      if ( length(drive.values$add_clinic_table$Hospital) == 0) {
+      selectInput("select.overlay", "Select area overlay:",
+                  choices = c("Boundaries Only" = "blank.overlay",
+                              "IRSD (Disadvantage)" = "irsd.overlay",
+                              "Aboriginal and Torres Strait Islander Population" = "atsi.overlay"
+                  ),
+                  selected = c("Boundaries Only" = "blank.overlay"))
+      
+      } else {
+        selectInput("select.overlay", "Select area overlay:",
+                    choices = c("Boundaries Only" = "blank.overlay",
+                                "IRSD (Disadvantage)" = "irsd.overlay",
+                                "Aboriginal and Torres Strait Islander Population" = "atsi.overlay",
+                                "Driving Time to Nearest Clinic" = "drive.overlay"
+                    ),
+                    selected = c("Boundaries Only" = "blank.overlay"))
+      }
+    
+    })
+    
     
     ######################### UI for selecting clinics ###################################
     # this phn selector
@@ -382,15 +509,13 @@ server <- function(input, output) {
     observeEvent(input$hospital, {
         
         if (input$hospital != "") {
-            
             output$clinic.button.add <-  renderUI({
-                actionButton("drive.add", "Add Clinic")
+              actionButton("location.add", "Add Clinic")
             })
             
             output$clinic.button.reset <-  renderUI({
                 actionButton("drive.clinic.reset", "Reset Clinics")
             })
-            
         }
     })
     
@@ -465,10 +590,8 @@ server <- function(input, output) {
     # Set labels area mouse over
     labels.drive <- eventReactive(input$drive.update, {
         sprintf(
-            "<strong>%s</strong><br/>
-            %.1f hr drive to nearest clinic<br/>",
-            drive.polys()$NAME16,
-            as.numeric(drive.polys()$shortest_time, 'hours')
+            "<strong>%s</strong><br/>",
+            drive.polys()$NAME16
             ) %>% 
                 lapply(htmltools::HTML)
     })
@@ -481,7 +604,7 @@ server <- function(input, output) {
             setView(147.016667, -32.163333, zoom = 5.5) %>%
         # Add Polygons
         addPolygons(
-          data = drive.polys(),
+          data = sa2.polys,
           layerId = ~CODE16,
           color = 'black',
           fillColor = 'white',
@@ -489,7 +612,7 @@ server <- function(input, output) {
           opacity = 0.25,
           highlight = highlightOptions(
             weight = 3),
-          label = labels.drive(),
+          label = sa2.polys$NAME16,
           labelOptions = labelOptions(
             style = list("font-weight" = "normal", padding = "3px 8px"),
             textsize = "15px",
@@ -500,8 +623,32 @@ server <- function(input, output) {
     
     # Adding polygons
     observeEvent(input$drive.update, {
-        
-        if (input$select.overlay == 'drive.overlay') {
+        if (input$select.overlay == 'blank.overlay') {
+          #Blank Overlay polygons
+          leafletProxy("drive.map") %>% 
+            # Clear old polygons
+            clearShapes %>%
+            # Add Polygons
+            addPolygons(
+              data = drive.polys(),
+              layerId = ~CODE16,
+              color = 'black',
+              fillColor = 'white',
+              weight = 1,
+              opacity = 0.25,
+              highlight = highlightOptions(
+                weight = 3),
+              label = drive.polys()$NAME16,
+              labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "15px",
+                direction = "auto")) %>%
+            fitBounds(min(set_coords()$long),
+                      min(set_coords()$lat),
+                      max(set_coords()$long),
+                      max(set_coords()$lat))
+          
+        } else if (input$select.overlay == 'drive.overlay') {
         #Driving Overlay polygons
         leafletProxy("drive.map") %>% 
             # Clear old polygons
@@ -598,8 +745,13 @@ server <- function(input, output) {
     
     # Adding a Legend
     observeEvent(input$drive.update, {
-        
-        if (input$select.overlay == 'drive.overlay') {
+        if (input$select.overlay == 'blank.overlay') {
+          # Remove legend for blank map
+          leafletProxy("drive.map") %>%
+            # Clear old legend 
+            clearControls()
+          
+        } else if (input$select.overlay == 'drive.overlay') {
             
             data <- drive.polys()@data %>% filter(!is.na(shortest_time))
             # Legend for Driving Map Overlay

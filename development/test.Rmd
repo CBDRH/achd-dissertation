@@ -259,32 +259,53 @@ polys$NAME16[polys$CODE16 == id]
 ```
 
 
-%>%
-            addPolygons(
-                data = drive.polys(),
-                layerId = ~CODE16,
-                fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = labels.drive(),
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-            addLegend(pal = pal.drive(), 
-                      values = bins.drive(), 
-                      opacity = 0.7, 
-                      title = "Driving time to clinics",
-                      position = "bottomright")
-        
+# Selecting New Clinics
+                  tabBox(title = NULL,
+                         tabPanel("Select Hospitals by location",
+                                  uiOutput('phn.selector'), # Primary Health Network
+                                  uiOutput('lhn.selector'), # Local Health Network
+                                  uiOutput('hospital.selector'), # Hospital
+                                  div(style="display:inline-block",uiOutput('clinic.button.add')), # Add hospital to list
+                                  div(style="display:inline-block",uiOutput('clinic.button.reset')), # Reset list
+                                  ),
+                          tabPanel("Filter Hospitals by Type",
+                                   uiOutput('description.filter'),
+                                   uiOutput('sector.filter'),
+                                   uiOutput('beds.filter'),
+                                   div(style="display:inline-block",uiOutput('clinic.button.add')), # Add hospital to list
+                                   div(style="display:inline-block",uiOutput('clinic.button.reset')), # Reset list
+                          ),
+                        width = 4, height = 340
+                  ),
+                  
+                  
+                  box(title = "Select Hospitals by location",
+                                  uiOutput('phn.selector'), # Primary Health Network
+                                  uiOutput('lhn.selector'), # Local Health Network
+                                  uiOutput('hospital.selector'), # Hospital
+                                  div(style="display:inline-block",uiOutput('clinic.button.add')), # Add hospital to list
+                                  div(style="display:inline-block",uiOutput('clinic.button.reset')), # Reset list
+                        width = 4, height = 340
+                  ),
+
+
+``` {r}
+ids <- c(1, 2, 3, 4, 5, 6, 7)
+
+new <- c(5, 6, 7, 8, 9, 10)
+```
+
+
+``` {r}
+any(new %in% ids)
+
+new[!(new %in% ids)]
+
+
+```
+
+
+
+
 
 
