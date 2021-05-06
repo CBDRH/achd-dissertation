@@ -290,19 +290,29 @@ polys$NAME16[polys$CODE16 == id]
 
 
 ``` {r}
-ids <- c(1, 2, 3, 4, 5, 6, 7)
-
-new <- c(5, 6, 7, 8, 9, 10)
+#import htt data
+htt.nsw <- readRDS(file = here("ACHD_Dashboard", "data", "htt_nsw.rds")) # Driving times data
+htt.details <- readRDS(file = here("ACHD_Dashboard", "data", "htt_details.rds")) # Hospital Metadata
 ```
 
 
 ``` {r}
-any(new %in% ids)
+new_ids <- c(517, 625, 638, 785, 818, 839, 737)
 
-new[!(new %in% ids)]
+```
+
+
+``` {r}
+htt.details %>%
+  select(Hospital.name, Hospital_ID) %>%
+  filter(Hospital_ID %in% new_ids) %>%
+        rename('Hospital' = Hospital.name,
+               'ID' = Hospital_ID)
 
 
 ```
+
+
 
 
 

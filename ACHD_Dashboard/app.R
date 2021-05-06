@@ -314,39 +314,10 @@ server <- function(input, output) {
       drive.values$area_data <- drive.values$area_data %>%
         left_join(shortest_time_new, by = "SA2_5DIGIT")
       
-      # Get driving information for selected hospital
-      selected_hospital <- htt.nsw %>%
-        select(SA2_5DIGIT, as.character(hospital_id)) %>%
-        mutate(hospital = as.duration(.[[as.character(hospital_id)]])) %>%
-        left_join(drive.values$area_data, by ='SA2_5DIGIT') %>%
-        select(hospital, SA2_NAME, SA2_5DIGIT)
-      
-      # New row to add to clinic table
-      new.row <- isolate(data.frame(
-                 # Hospital Name
-                 Hospital = input$hospital,
-                 # Hospital ID
-                 ID = hospital_id,
-                 stringsAsFactors = FALSE))
-      
-      # Add the new row to the clinic table, if it wasnt already selected
-      if ( !(input$hospital %in% isolate(drive.values$add_clinic_table$Hospital)) )
-      { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
-      
-      # Display the new clinics table
-      output$new.clinics.output <- renderUI({
-        output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
-        tableOutput("new.clinics.table")
-      })
-      
-      
     })
     
     ######################### When 'Add Clinic' Button is clicked in the filter selector ####################
     observeEvent(input$filter.add, {
-      print(input$description.filter)
-      print(input$sector.filter)
-      print(input$beds.filter)
       
       htt.details.fitlered <- htt.details %>% { if( !(is.null(input$description.filter) ) ) filter(., Description %in% input$description.filter) else . } %>% 
                       { if( !(is.null(input$sector.filter) ) ) filter(., Sector %in% input$sector.filter) else . } %>%
@@ -381,28 +352,16 @@ server <- function(input, output) {
     observeEvent({ input$location.add
                    input$filter.add }, {  
       # Get driving information for selected hospital
-      selected_hospitals <- htt.nsw %>%
-        select(SA2_5DIGIT, as.character(drive.values$new_clinic_ids)) %>%
-        mutate(hospital = as.duration(.[[as.character(hospital_id)]])) %>%
-        left_join(drive.values$area_data, by ='SA2_5DIGIT') %>%
-        select(hospital, SA2_NAME, SA2_5DIGIT)
-      
-      # New row to add to clinic table
-      new.row <- isolate(data.frame(
-        # Hospital Name
-        Hospital = input$hospital,
-        # Hospital ID
-        ID = hospital_id,
-        stringsAsFactors = FALSE))
-      
-      # Add the new row to the clinic table, if it wasnt already selected
-      if ( !(input$hospital %in% isolate(drive.values$add_clinic_table$Hospital)) )
-      { isolate(drive.values$add_clinic_table <- rbind(drive.values$add_clinic_table, new.row)) }
-      
+      selected_hospitals <- htt.details %>%
+        select(Hospital.name, Hospital_ID) %>%
+        filter(Hospital_ID %in% drive.values$new_clinic_ids) %>%
+        rename('Hospital' = Hospital.name,
+               'ID' = Hospital_ID)
+
       # Display the new clinics table
       output$new.clinics.output <- renderUI({
-        output$new.clinics.table <- renderTable(drive.values$add_clinic_table)
-        tableOutput("new.clinics.table")
+        output$new.clinics.table <- renderTable(selected_hospitals)
+        div(style = 'overflow-y:scroll;height:300px;', tableOutput("new.clinics.table"))
       })
       
     })
@@ -450,7 +409,6 @@ server <- function(input, output) {
       }
     
     })
-    
     
     ######################### UI for selecting clinics ###################################
     # this phn selector
