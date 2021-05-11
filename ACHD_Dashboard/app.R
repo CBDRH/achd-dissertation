@@ -233,10 +233,7 @@ body <- dashboardBody(
                   ),
                   
                   # Information about Hospital Coverage
-                  tabBox(title = NULL,
-                         id = "clinic.tabs", 
-                         tabPanel("Current Clinics", uiOutput("current.clinic.output")), # Current hospitals
-                         tabPanel("New Clinics", uiOutput("new.clinics.output")), # Newly Selected Hospitals
+                  box(title = "New Clinics", uiOutput("new.clinics.output"), # Newly Selected Hospitals
                          width = 4, height = 340),
                 ),
                 
