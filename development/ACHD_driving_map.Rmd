@@ -1,0 +1,205 @@
+---
+title: "Adult Congeital Heart Disease Maps"
+author: "Calum Nicholson"
+date: "04/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(rgdal)
+library(sp)
+library(tidyverse)
+library(leaflet)
+library(leaflet.extras)
+library(ggplot2)
+library(sjmisc)
+library(lubridate)
+```
+
+``` {r, echo=FALSE, include=FALSE}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
+
+# Path to the study's data folder
+app_data <- '../ACHD_Dashboard/data/'
+
+```
+
+
+``` {r, echo=FALSE, include=FALSE}
+################################## LOAD DATA ############################################
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD_Database_name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, '/sa2_demographics.rds', sep="")) %>%
+                            mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                                   IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+
+#import htt data
+htt.nsw <- readRDS(file = paste(app_data, '/htt_nsw.rds', sep=""))
+htt.details <- readRDS(file = paste(app_data, '/htt_details.rds', sep=""))
+
+#current achd clinics
+achd_ids <- c(251, 755, 152, 683, 737, 979)
+#placeholer for adding new clinics
+new_achd_ids <- achd_ids
+
+#Import area polygons
+sa2.polys <- readOGR(paste(app_data, 'ASGS/sa2/sa2_polys.shp', sep=""))
+
+```
+
+``` {r}
+# recalculate shortest time, to swap orange for dubbo
+dubbo <- htt.nsw %>% select(SA2_5DIGIT, '251') %>%
+            rename('time_to_dubbo' = '251')
+
+sa2.TB <- left_join(sa2.TB, dubbo, by = 'SA2_5DIGIT') %>%
+            select(-time_to_orange, -shortest_time) %>%
+            mutate(shortest_time = pmin(time_to_dubbo,time_to_nowra,time_to_canberra,
+                                     time_to_port,time_to_rpa,time_to_westmead),
+                   shortest_time = duration(shortest_time, "seconds"))
+
+
+
+
+```
+
+
+``` {r, echo=FALSE, include=FALSE}
+
+prepare.area.data <- function(achd_data) {
+    # Diagnosis severity counts in each area
+    beth.drive <- achd_data %>%
+        group_by(sa2) %>%
+        dplyr::summarise(ACHD_count = n(), 
+                         beth_1 = sum(bethesda_code == 1),
+                         beth_2 = sum(bethesda_code == 2), 
+                         beth_3 = sum(bethesda_code == 3), 
+                         beth_4 = sum(bethesda_code == 4),
+                         ltf_3 = sum(ltf_3),
+                         ltf_4 = sum(ltf_4),
+                         ltf_5 = sum(ltf_5))
+        
+    
+    # Diagnoses present in each area 
+    dx.drive <- achd_data %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
+        group_by(sa2) %>% 
+        summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
+    
+    # Join above to table builer data
+    area.drive <- left_join(sa2.TB, beth.drive, by = c('SA2_NAME' = 'sa2')) %>% 
+        left_join(dx.drive, by = c('SA2_NAME' = 'sa2')) %>%
+        mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
+        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4',
+                    'ltf_3', 'ltf_4', 'ltf_5'), function(x) replace(x, is.na(x), 0))
+    
+    area.drive
+    }
+
+```
+
+``` {r, echo=FALSE, include=FALSE}
+area.achd <- prepare.area.data(achd)
+drive.poly <- merge(sa2.polys, area.achd, by.x = 'NAME16', by.y = 'SA2_NAME')
+```
+
+``` {r, echo=FALSE, include=FALSE, warning = FALSE}
+### Set up for driving map
+
+# Select bins for color pallette
+drive.bins <- seq(0,10,1)
+
+# Create Colour pallette
+drive.pal <- colorBin("YlOrRd", domain = as.numeric(drive.poly$shortest_time, "hours"), bins = drive.bins)
+
+# Labels for area mouse over
+labels.drive <- sprintf(
+            "<strong>%s</strong><br/>
+            %s ACHD patients<br/>
+            Simple: %s | Moderate: %s | Severe: %s<br/>
+            %.1f hr drive to nearest clinic<br/>",
+            drive.poly$NAME16, 
+            ifelse(drive.poly$ACHD_count < 5, "<5", drive.poly$ACHD_count),
+            ifelse(drive.poly$beth_1 < 5, "<5", drive.poly$beth_1),
+            ifelse(drive.poly$beth_2 < 5, "<5", drive.poly$beth_2),
+            ifelse(drive.poly$beth_3 < 5, "<5", drive.poly$beth_3),
+            as.numeric(drive.poly$shortest_time, 'hours')
+            ) %>% 
+                lapply(htmltools::HTML)
+
+# Current ACHD clinics and new clinics will appear different colours
+HospitalIcons <- awesomeIconList(
+    Current = makeAwesomeIcon(
+        icon = 'hospital-o', 
+        markerColor = 'green', 
+        iconColor = 'white', 
+        library = "fa"), 
+    New = makeAwesomeIcon(
+        icon = 'hospital-o', 
+        markerColor = 'orange', 
+        iconColor = 'white', 
+        library = "fa") )
+    
+# remove nas for legend
+legend.drive <- drive.poly@data %>% filter(!is.na(shortest_time))
+```
+
+## Driving times to ACHD Clinics in NSW
+
+Map of New South Wales with a Choloropeth showing the driving time in hours from each area to the nearest ACHD clinic. Area Boundaries at at the SA2 level, map markers show ACHD clinic locations.
+
+``` {r, echo = FALSE, fig.width=10, fig.height=7, warning = FALSE, message = FALSE}
+leaflet() %>%
+            addTiles() %>%
+            setView(147.016667, -32.163333, zoom = 5.5) %>%
+            addAwesomeMarkers(
+                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
+                lng = ~Longitude,
+                lat = ~Latitude,
+                label = ~Hospital.name,
+                icon = ~HospitalIcons["Current"]) %>%
+            addPolygons(
+                data = drive.poly,
+                layerId = ~CODE16,
+                fillColor = ~drive.pal(as.numeric(drive.poly$shortest_time, 'hours')),
+                weight = 1,
+                opacity = 1,
+                color = "white",
+                dashArray = "3",
+                fillOpacity = 0.7,
+                highlight = highlightOptions(
+                    weight = 3,
+                    color = "#666",
+                    dashArray = "",
+                    fillOpacity = 0.7,
+                    bringToFront = TRUE),
+                label = labels.drive,
+                labelOptions = labelOptions(
+                    style = list("font-weight" = "normal", padding = "3px 8px"),
+                    textsize = "15px",
+                    direction = "auto")) %>%
+            addLegend(pal = drive.pal, 
+                          values = as.numeric(legend.drive$shortest_time, 'hours'), 
+                          opacity = 0.7, 
+                          title = "Driving time (hrs)",
+                          position = "bottomright",
+                          layerId = 'drive.legend')
+
+
+```
+
+
+
