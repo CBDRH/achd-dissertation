@@ -48,7 +48,7 @@ htt.nsw <- readRDS(file = "./data/htt_nsw.rds") # Driving times data
 htt.details <- readRDS(file = "./data/htt_details.rds") # Hospital Metadata
 
 #current achd clinics
-achd_ids <- c(152, 408, 646, 683, 737, 979)
+achd_ids <- c(152, 408, 646, 683, 737, 979, 755)
 #placeholer for adding new clinics
 new_achd_ids <- achd_ids
 
@@ -480,7 +480,7 @@ server <- function(input, output) {
                                                 ltf = as.character(),
                                                 stringsAsFactors = FALSE)
     #For tracking the ACHD clinic IDs selected
-    drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+    drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979, 755)
     #For adding new areas for report summary
     drive.values$area.report.list <- list()
     #For the area level data
