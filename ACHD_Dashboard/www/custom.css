@@ -1,0 +1,11 @@
+.navbar-nav {
+  float: none !important;
+}
+.navbar-nav > li:nth-child(2) {
+  float: right;
+}
+
+.helpBox {
+  font-size: 9pt;
+  text-align: left;
+}
