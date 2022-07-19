@@ -25,7 +25,7 @@ dashboardPage(
                             
                             sidebarLayout(
                                 
-                                sidebarPanel(width=3, height=900, style="background-color: white",
+                                sidebarPanel(width=2, height=900, style="background-color: white",
                                              
                                     downloadButton("report.dl", "Download report", icon=icon("download")),
                                     br(),     
@@ -46,9 +46,9 @@ dashboardPage(
                                 ),
                                 
                                 
-                                mainPanel(width=9,
+                                mainPanel(width=10,
                                           fluidPage(
-                                              column(width = 9,
+                                              column(width = 8,
                                                      leafletOutput('drive.map', height = 860),
                                                      
                                                      # Summary Value Boxes
@@ -62,7 +62,7 @@ dashboardPage(
                                                      
                                                         ), 
 
-                                              column(width=3,
+                                              column(width=4,
                                                      
                                                      # Map Customisation
                                                      box(collapsible = T, collapsed = F, title = tippy(HTML(paste('Map Customisation', icon('info'))), 
@@ -100,8 +100,8 @@ dashboardPage(
                                                      ),       
                                                      tabBox(title = NULL,
                                                             id = "clinic.tabs", 
-                                                            tabPanel("Current Clinics", uiOutput("current.clinic.output")), # Current hospitals
-                                                            tabPanel("New Clinics", uiOutput("new.clinics.output")), # Newly Selected Hospitals
+                                                            tabPanel("Current\nClinics", uiOutput("current.clinic.output")), # Current hospitals
+                                                            tabPanel("New\nClinics", uiOutput("new.clinics.output")), # Newly Selected Hospitals
                                                             width = 12),
                                                      width=12),
                                                     
