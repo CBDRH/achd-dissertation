@@ -25,7 +25,7 @@ library(wesanderson)
 
 ``` {r message=FALSE, warning=FALSE, include=FALSE}
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
+pt_data <- 'Z:CURRENT_STUDIES/2020_achd_map/DATA/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- here("ACHD_Dashboard", "data")
@@ -85,8 +85,8 @@ sb.mortality <- c(0,1)
 sb.sex <- c(1,2,4)
 sb.bethesda <- c(1,2,3,4)
 sb.age <- c(11,111)
-sb.dates <- c("2000-01-01", "2020-12-31")
-sb.last.clinic <- c(0, 22)
+sb.dates <- c("2000-01-01", "2022-12-31")
+sb.last.clinic <- c(0, 23)
 
 achd.filtered <- filter.data(achd,
                              sb.mortality,

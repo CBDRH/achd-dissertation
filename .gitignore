@@ -36,4 +36,4 @@ vignettes/*.pdf
 ./analysis_pipeline/output/
 ./ACHD_Dashboard/data/
 rsconnect
-./pub_figures/
+pub_figures
