@@ -12,6 +12,15 @@ dashboardPage(
     dashboardHeader(disable = TRUE),
     dashboardSidebar(disable = TRUE),
     dashboardBody(
+        tags$head(tags$style(HTML('.nav-tabs-custom .nav-tabs li.active {margin-left: -20px;}'
+                            )),
+                  tags$style(HTML('.shiny-table {margin-left: -25px;}'
+                            )),
+                  tags$style(HTML('.small-box.bg-light-blue {margin-left: 0px;
+                                                             margin-right: 0px;
+                                                             border: 0px}'
+                  )),
+                  ),
         navbarPage(
     
     "Clinic Planning Tool",
@@ -49,14 +58,14 @@ dashboardPage(
                                 mainPanel(width=10,
                                           fluidPage(
                                               column(width = 8,
-                                                     leafletOutput('drive.map', height = 860),
+                                                     leafletOutput('drive.map', height = 660),
                                                      
                                                      # Summary Value Boxes
                                                      valueBoxOutput('pt.count.drive', width = 3), # Total Number of Patients
                                                      valueBoxOutput('beth.count.drive', width = 3), # Breakdown of disease Severity
                                                      valueBoxOutput('ltf.count.drive', width = 3), # Number of Patients lost to follow up
                                                      valueBoxOutput('hr.count.drive', width = 3), # Number of patients within a 1 hour drive
-                                                     uiOutput('area.dx.box') # Diagnoses Present in selected area
+                                                     
                                                      
                                                      
                                                      

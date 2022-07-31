@@ -280,8 +280,8 @@ function(input, output) {
         # Total Number of Patients
         output$pt.count.drive <- renderValueBox({
             valueBox(tags$p(sum(drive.area.achd()$ACHD_count),
-                            style = "font-size: 75%;"),
-                     'selected patients', 
+                            style = "font-size: 50%;"),
+                     'Selected Patients', 
                      width = 3, color = 'light-blue')
         })
         # Breakdown is disease severity
@@ -291,7 +291,7 @@ function(input, output) {
                       sum(drive.area.achd()$beth_2), " | ",
                       sum(drive.area.achd()$beth_3), 
                       sep = "  "),
-                style = "font-size: 75%;"),
+                style = "font-size: 50%;"),
                 'Simple | Moderate | Severe',
                 color = 'light-blue'
             )
@@ -299,7 +299,7 @@ function(input, output) {
         # Total Number of Patients Lost to Follow up
         output$ltf.count.drive <- renderValueBox({
             valueBox(tags$p(sum(drive.area.achd()$ltf_3),
-                            style = "font-size: 75%;"), 
+                            style = "font-size: 50%;"), 
                      "Patients Lost to Follow up", 
                      color = 'light-blue')
         })
@@ -309,7 +309,7 @@ function(input, output) {
                 drive.values$area_data %>% filter(as.numeric(shortest_time, "hours") <= 1) %>%
                     summarise(hr_drive = sum(ACHD_count)) %>%
                     pull(hr_drive),
-                style = "font-size: 75%;"),
+                style = "font-size: 50%;"),
                 "Patients in 1hr drive to ACHD clinic", 
                 color = 'light-blue')
         })
@@ -618,6 +618,7 @@ function(input, output) {
         showModal(modalDialog(
             title = NULL,
             uiOutput('area.output'),
+            uiOutput('area.dx.box'), # Diagnoses Present in selected area
             footer = modalButton("Done"),
             easyClose = TRUE,
             fade = TRUE
@@ -722,13 +723,14 @@ function(input, output) {
                 t() %>% as.data.frame() %>%
                 rename("dx_count" = V1) %>% 
                 mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)]) %>%
-                filter(dx_count > 0)
+                filter(dx_count > 0) %>%
+                mutate(dx_count = if_else(dx_count<5, 5, dx_count))
             
             ggplot(data = dx.area.data, aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
                 geom_bar(stat="identity") +
                 scale_y_continuous(breaks = seq(0, max(dx.area.data$dx_count), 1)) +
                 theme(axis.text.x = element_text(angle = 90)) +
-                labs(title = "Frequecy of each diagnosis", 
+                labs(title = "For privacy, counts of less than 5 have been displayed as 5", 
                      y = "count",
                      x = "") +
                 coord_flip()
