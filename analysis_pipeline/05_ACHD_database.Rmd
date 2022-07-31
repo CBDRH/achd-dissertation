@@ -16,7 +16,11 @@ Check how removing missing data affects the demographics.
 knitr::opts_chunk$set(echo = TRUE)
 
 # Path to ACHD database data (note: only accessible at RPAH)
+<<<<<<< HEAD
 ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/ACHD_TABLES_2022/'
+=======
+ACHD_path <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
+>>>>>>> bafaf96063f0261f2a7b074f3def18c4be48b417
 
 library(tidyverse)
 library(lubridate)
@@ -422,10 +426,9 @@ DX <- DX %>% mutate_at(EPCC_codes,
                            ) %>%
                  mutate(no_dx = rowSums(.[,EPCC_codes]))
 
-#Recode the death variable to binary
+# Recode the death variable to binary
 MAIN <- MAIN %>% mutate_at('death', 
                            function(x) replace(x, is.na(x), 0)) # recode all na values to 0)
-                 
 ```
 
 in the disease severity code 'bethesda_code'; 4 codes for 'Classification Unknown', there are a few other codes (0,9,NA) that can be cleaned to 4 also
@@ -559,8 +562,10 @@ person.level <- person.level %>%
               # age at last clinic attendance
               age_last_clinic = as.period(dob %--% last_clinic),
               # time since last clinic attendance
-              gap = as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic)
-               )
+              gap = case_when(
+                death == 0 ~ as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic),
+                death == 1 ~ as.duration(death_date - last_clinic),
+               ))
 ```
 
 ``` {r warning = FALSE}
@@ -585,7 +590,10 @@ person.level <- person.level %>%
               # age at last clinic attendance
               age_last_clinic_2000 = as.period(dob %--% last_clinic_2000),
               # time since last clinic attendance
-              gap_2000 = as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic_2000),
+              gap_2000 = case_when(
+                death == 0 ~ as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic_2000),
+                death == 1 ~ as.duration(death_date - last_clinic_2000),
+               ),
               # not seen for more than 3 years
               ltf_3 = ifelse(as.numeric(gap_2000, 'years') > 3, 1, 0),
               # not seen for more than 4 years
@@ -1056,7 +1064,40 @@ analysis_dataset %>% select(-clinics_2000) %>%
       write.csv(paste("Z:/CURRENT_STUDIES/2020_achd_map/DATA/", 'output/rpah_analysis_dataset.csv', sep=""))
 ```
 
+``` {r}
+# Some summary numbers for publication
+paste("age mean: ", mean(as.numeric(analysis_dataset$age, 'years')))
+paste("age sd: ", sd(as.numeric(analysis_dataset$age, 'years')))
 
+paste("female: ", ( analysis_dataset %>% filter(sex == 2) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("neither m or f: ", ( analysis_dataset %>% filter(sex == 4) %>% nrow() ))
+
+paste("Bicuspid: ", ( analysis_dataset %>% filter(`09.15.22` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("VSD: ", ( analysis_dataset %>% filter(`07.10.00` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("ASD: ", ( analysis_dataset %>% filter(`05.03.00` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("TOF: ", ( analysis_dataset %>% filter(`01.01.01` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("PFO: ", ( analysis_dataset %>% filter(`05.03.01` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+
+paste("simple: ", ( analysis_dataset %>% filter(bethesda_code == 1) %>% nrow() ))
+paste("moderate: ", ( analysis_dataset %>% filter(bethesda_code == 2) %>% nrow() ))
+paste("complex: ", ( analysis_dataset %>% filter(bethesda_code == 3) %>% nrow() ))
+paste("unknown: ", ( analysis_dataset %>% filter(bethesda_code == 4) %>% nrow() ))
+
+paste("no clinics mean: ", mean(analysis_dataset$no_clinics_2000))
+paste("no clinincs sd: ", sd(analysis_dataset$no_clinics_2000))
+
+paste("gap mean: ", mean(as.numeric(analysis_dataset$gap_2000, 'years'), na.rm = TRUE))
+paste("gap sd: ", sd(as.numeric(analysis_dataset$gap_2000, 'years'), na.rm = TRUE))
+
+paste("ltf all: ", ( analysis_dataset %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("ltf simple: ", ( analysis_dataset %>% filter(bethesda_code == 1) %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("ltf moderate: ", ( analysis_dataset %>% filter(bethesda_code == 2) %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("ltf complex: ", ( analysis_dataset %>% filter(bethesda_code == 3) %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+```
+
+``` {r}
+hist(as.numeric(analysis_dataset$gap_2000, 'years'))
+```
 
 
 

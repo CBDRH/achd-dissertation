@@ -316,9 +316,6 @@ coords <- do.call(rbind,lapply(sa2.polys@polygons, function(x)
                     )
         })
 )
-
-
-
 ```
 
 ``` {r}

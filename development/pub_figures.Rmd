@@ -1,0 +1,458 @@
+---
+title: "Figures"
+author: "Calum Nicholson"
+date: "05/10/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(rgdal)
+library(sp)
+library(tidyverse)
+library(leaflet)
+library(leaflet.extras)
+library(ggplot2)
+library(ggpubr)
+library(sjmisc)
+library(here)
+library(lubridate)
+library(viridis)
+library(wesanderson)
+```
+
+``` {r message=FALSE, warning=FALSE, include=FALSE}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+app_data <- here("ACHD_Dashboard", "data")
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+              
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD_Database_name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, '/sa2_demographics.rds', sep="")) %>%
+                  mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                         IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+```
+
+```{r}
+filter.data <- function(data,
+                          sb.mortality,
+                          sb.sex,
+                          sb.bethesda,
+                          sb.age,
+                          sb.dates,
+                          sb.last.clinic) 
+       {
+        data %>% 
+            filter(death %in% sb.mortality) %>%
+            filter(is.na(sex) | sex %in% sb.sex) %>%
+            filter(bethesda_code %in% sb.bethesda) %>%
+            filter(as.numeric(age, 'years') >= sb.age[1]) %>%
+            filter(as.numeric(age, 'years') <= sb.age[2]) %>%
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') >= sb.last.clinic[1]) %>%
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') <= sb.last.clinic[2]) %>%
+    
+            {if( !(sb.dates[1] == "2000-01-01" & sb.dates[2] == "2020-12-31") )
+              
+              mutate(., clinics_2000 = map(clinics_2000, ~ .x %>%
+                                        mutate(
+                                          clinic_in_period = 
+                                            sapply(.$clinic_date, 
+                                                   function(x) x %within% (as.Date(sb.dates[1])
+                                                                          %--% 
+                                                                          as.Date(sb.dates[2]))))),
+                   in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)
+                   ) %>%
+              filter(in_time_period == TRUE)
+              
+              else . }
+       }
+```
+
+``` {r}
+sb.mortality <- c(0,1)
+sb.sex <- c(1,2,4)
+sb.bethesda <- c(1,2,3,4)
+sb.age <- c(11,111)
+sb.dates <- c("2000-01-01", "2020-12-31")
+sb.last.clinic <- c(0, 22)
+
+achd.filtered <- filter.data(achd,
+                             sb.mortality,
+                             sb.sex,
+                             sb.bethesda,
+                             sb.age,
+                             sb.dates,
+                             sb.last.clinic)
+                
+```
+
+``` {r}
+area.achd <- achd %>%
+              group_by(sa2, gcc) %>%
+              dplyr::summarise(ACHD_count = n(), 
+                        beth_1 = sum(bethesda_code == 1),
+                        beth_2 = sum(bethesda_code == 2), 
+                        beth_3 = sum(bethesda_code == 3), 
+                        beth_4 = sum(bethesda_code == 4))
+
+area.dx <- achd %>%
+            mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+            mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
+            group_by(sa2) %>% 
+            dplyr::summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
+
+
+area.data <- left_join(sa2.TB, area.achd, by = c("SA2_NAME" = 'sa2')) %>% 
+             left_join(area.dx, by = c("SA2_NAME" = 'sa2')) %>%
+                mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
+                mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+```
+
+``` {r, include = FALSE, echo = FALSE, warning = FALSE, message = FALSE}
+# Plots for patient level demographics
+global_font = 35
+
+# Age Histogram
+age_plot <- ggplot(achd, aes(x=as.numeric(age, "years"), fill = death)) +
+                  geom_histogram(colour = "black") +
+                  labs(y = "Number of Patients", 
+                       x = "Age (yrs)") +
+                  scale_fill_manual(values=c(viridis(n = 20, option = "magma")[19], 
+                                             viridis(n = 20, option = "magma")[14])) +
+                  theme(axis.title.x=element_blank()) +
+                  theme_minimal(base_size = global_font) + 
+                  theme(legend.position="none") +
+                  scale_x_continuous(limits = c(18,110))
+
+# Sex Bar Plot
+beth_plot <- achd %>% group_by(death, bethesda_code) %>% summarise(n = n()) %>%
+                ggplot(aes(x=bethesda_code, y = n, fill = death)) +
+                    geom_bar(position="stack", stat="identity", color = "black") +
+                    scale_x_discrete(name = "Disease Complexity",
+                                     labels=c("1" = "Simple", "2" = "Moderate", "3" = "Complex",
+                                              "4" =  "Unknown")) +
+                    labs(y = "Number of Patients") +
+                    theme_minimal(base_size = global_font) +
+                    theme(legend.title = element_blank(),
+                          legend.background = element_rect(color = "black")) +
+                    scale_fill_manual(name = "Death", labels = c("Alive", "Deceased"),
+                                      values=c(viridis(n = 20, option = "magma")[19], 
+                                               viridis(n = 20, option = "magma")[14]))
+
+# Number of Clinic visits per patient
+nclinic_plot <- achd %>%
+                group_by(death, no_clinics_2000) %>% summarise(n = n()) %>%
+                        ggplot(aes(x=no_clinics_2000, y = n, fill = death)) +
+                        geom_bar(position="stack", stat="identity", color = "black") +
+                        scale_x_continuous() +
+                        labs(x = "Number of Clinic Visits", 
+                             y = "Number of Patients") +
+                        theme(axis.title.x=element_blank()) +
+                        theme_minimal(base_size = global_font) +
+                        theme(legend.title = element_blank(),
+                              legend.background = element_rect(color = "black")) +
+                        scale_fill_manual(name = "Death", labels = c("Alive", "Deceased"),
+                                          values=c(viridis(n = 20, option = "magma")[19], 
+                                                   viridis(n = 20, option = "magma")[14]))
+
+# Time since last visit histogram
+ltf_plot <- ggplot(achd, aes(x=as.numeric(gap_2000, "years"), fill = death)) +
+                        geom_histogram(color = "black") +
+                        labs(y = "Number of Patients", 
+                             x = "Time since last clinic visit (yrs)")  +
+                        scale_fill_manual(values=c(viridis(n = 20, option = "magma")[19], 
+                                                   viridis(n = 20, option = "magma")[14])) +
+                        theme(axis.title.x=element_blank()) +
+                        theme_minimal(base_size = global_font) + 
+                        theme(legend.position="none")
+
+# Number of dx per patients
+ndx_plot <- achd %>% 
+            filter(no_dx > 0) %>%
+            group_by(death, no_dx) %>% summarise(n = n()) %>%
+                ggplot(aes(x=as.integer(no_dx), y = n, fill = death) ) +
+                    geom_bar(position="stack", stat="identity", color = "black") +
+                    labs(x = "Number of Diagnoses", 
+                         y = "Number of Patients") +
+                    theme(axis.title.x=element_blank()) +
+                    theme_minimal(base_size = global_font)  +
+                    theme(legend.title = element_blank(),
+                          legend.background = element_rect(color = "black")) +
+                    scale_fill_manual(name = "Death", labels = c("Alive", "Deceased"),
+                                      values=c(viridis(n = 20, option = "magma")[19], 
+                                               viridis(n = 20, option = "magma")[14])) +
+                    scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10))
+```
+
+``` {r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=10}
+# Figure 1 - Patient level demographics
+fig_1 <-ggarrange(
+              ggarrange(age_plot, ltf_plot, labels = c("A","B"), nrow = 1,
+                        font.label=list(color="black",size=global_font)),
+              ggarrange(beth_plot, ndx_plot, nclinic_plot, labels = c("C", "D", "E"), nrow = 1, common.legend = TRUE, 
+                        legend = "bottom",
+                        font.label=list(color="black",size=global_font)),
+              nrow = 2
+              )
+
+fig_1
+```
+
+``` {r}
+dx.data <- achd %>%
+            select(dx_codes$EPCC_Code, death) %>%
+            mutate_all(as.character) %>%
+            mutate_all(as.numeric) %>%
+            group_by(death) %>%
+            summarise_all(sum, na.rm = TRUE) %>%
+            t() %>% as.data.frame() %>% 
+            rename("dx_count_alive" = V1,
+                   "dx_count_dead" = V2) %>% 
+            mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)],
+                   dx_count_all = dx_count_alive + dx_count_dead) %>%
+            filter(!is.na(dx_label))
+```
+
+``` {r, fig.width=12, fig.height=8}
+# Frequency of each dx
+fig_2 <- dx.data %>% filter(dx_count_all > 0) %>% slice_max(dx_count_all, n = 20) %>%
+                          select(-dx_count_all) %>%
+                          gather(var, value, -dx_label) %>%
+                          ggplot(aes(x=reorder(dx_label, value), y=value, fill=var)) + 
+                              geom_bar(position="stack", stat="identity", color = "black") +
+                              theme(axis.text.x = element_text(angle = 90)) +
+                              labs(y = "Number of Patients") +
+                              coord_flip() +
+                              theme_minimal(base_size = global_font)  +
+                              theme(title = element_blank(),
+                                    legend.title = element_blank(),
+                                    legend.background = element_rect(color = "black")) +
+                              scale_fill_manual(name = "Death", labels = c("Alive", "Deceased"),
+                                                values=c(viridis(n = 20, option = "magma")[19], 
+                                                viridis(n = 20, option = "magma")[14]))
+
+fig_2
+```
+
+Figure 3 alternate, just display the maps with driving times.
+
+``` {r}
+# Spatial Libraries
+library(rgdal)
+library(sp)
+library(sf)
+library(ggspatial)
+library(viridis)
+
+#import polygon boundaries
+sa2.polys <- st_read(here("analysis_pipeline", "input", "ASGS", "sa2", "SA2_2016_AUST.shp")) %>%
+              select(SA2_5DIG16, SA2_NAME16, GCC_NAME16, geometry) %>%
+              filter(GCC_NAME16 %in% c("Rest of NSW", "Greater Sydney", "Australian Capital Territory")) %>%
+              filter(SA2_NAME16 != "Lord Howe Island") %>%
+              left_join(sa2.TB %>% select(SA2_NAME, shortest_time), by = c("SA2_NAME16" = "SA2_NAME"))
+
+#Hospital details
+htt.details <- readRDS(file = here("ACHD_Dashboard", "data", "htt_details.rds")) %>%
+                    filter(Hospital_ID %in% c(152, 408, 646, 683, 737, 979))
+
+htt.details.sydney <- htt.details %>%
+                    filter(Hospital_ID %in% c(737, 979))
+
+htt.details.act <- htt.details %>%
+                    filter(Hospital_ID %in% c(152))
+
+htt.details.nsw <- htt.details %>%
+                    filter(Hospital_ID %in% c(408, 646, 683))
+
+htt.details.new <- readRDS(file = here("ACHD_Dashboard", "data", "htt_details.rds")) %>%
+                      filter(Hospital_ID %in% c(848, 936, 251))
+
+htt.details.all <- readRDS(file = here("ACHD_Dashboard", "data", "htt_details.rds")) %>%
+                      filter(Hospital_ID %in% c(152, 408, 646, 683, 737, 979, 848, 936, 251))
+
+```
+
+``` {r, fig.width = 4, fig.height = 4}
+fig.3a.all <- ggplot(data = sa2.polys) +
+                geom_sf(aes(fill = as.numeric(shortest_time, 'hours')), colour = "white", size = 0.01) +
+                geom_point(data = htt.details, aes(x = Longitude,y = Latitude), 
+                          colour = 'black', size = 8, shape = 4) +
+                scale_fill_viridis(option = 'plasma',
+                                   name = "Driving time to\nnearest clinic (hrs)",
+                                   direction = -1) +
+                theme_void() +
+                theme(legend.text=element_text(size=12),
+                      legend.title=element_text(size=14),
+                      legend.key.size = unit(1, 'cm')
+                      )
+
+fig.3a.all
+```
+``` {r, fig.width = 4, fig.height = 4}
+fig.3b.syd <- ggplot(data = sa2.polys %>% filter(GCC_NAME16 == "Greater Sydney")) +
+                geom_sf(aes(fill = as.numeric(shortest_time, 'hours')), colour = "white", size = 0.01) +
+                geom_point(data = htt.details.sydney, aes(x = Longitude,y = Latitude), 
+                           colour = 'black', size = 8, shape = 4) +
+                scale_fill_viridis(option = 'plasma',
+                                   name = "Driving time to\nnearest clinic (hrs)",
+                                   direction = -1) +
+                theme_void()  +
+                theme(legend.text=element_text(size=12),
+                      legend.title=element_text(size=14),
+                      legend.key.size = unit(1, 'cm')
+                      )
+
+fig.3b.syd
+```
+
+``` {r, fig.width = 4, fig.height = 4}
+fig.3c.act <- ggplot(data = sa2.polys %>% filter(GCC_NAME16 == "Australian Capital Territory")) +
+                geom_sf(aes(fill = as.numeric(shortest_time, 'hours')), colour = "white", size = 0.01) +
+                geom_point(data = htt.details.act, aes(x = Longitude,y = Latitude), 
+                           colour = 'black', size = 8, shape = 4) +
+                scale_fill_viridis(option = 'plasma',
+                                   name = "Driving time to\nnearest clinic (hrs)",
+                                   direction = -1) +
+                theme_void()  +
+                theme(legend.text=element_text(size=12),
+                      legend.title=element_text(size=14),
+                      legend.key.size = unit(1, 'cm')
+                      )
+
+fig.3c.act
+```
+
+
+``` {r, fig.width = 12, fig.height = 12}
+# add graphs in a 1x3 layout
+fig_3 <- ggarrange(fig.3a.all, fig.3b.syd, fig.3c.act, 
+                   labels = c("A","B", "C"),
+                   font.label=list(color="black",size=global_font),
+                   nrow = 3, ncol = 1, align = "none", hjust = -25)
+
+fig_3
+```
+``` {r}
+# Load the hospital travel time data
+htt <- read.csv(here("analysis_pipeline", "input", "duration_sa2_hospitals.csv")) %>%
+                rename("SA2_5DIGIT" = SA2_5DIG16) %>%
+                mutate(SA2_5DIGIT = as.character(SA2_5DIGIT)) %>%
+                inner_join(sa2.polys %>% select(SA2_5DIG16), by = c('SA2_5DIGIT' = 'SA2_5DIG16')) # filter for only NSW/ACT areas
+```
+
+``` {r}
+#filter for only NSW/ACT hospitals
+htt.nsw <- htt
+
+# remove the extra text from columns for easy matching to hospital IDs
+names(htt.nsw) <- gsub("time_to_", "", names(htt.nsw))
+
+#Match column names with hosptial ids to select only hospitals from NSw/ACT
+htt.nsw <- htt.nsw %>% 
+          # Select old and new hospitals
+          select(SA2_5DIGIT, as.character(htt.details.all$Hospital_ID))%>%
+          # rename locations to something understandable
+          rename("time_to_orange" = `646`,
+                 "time_to_newcastle" = `408`,
+                 "time_to_canberra" = `152`,
+                 "time_to_port" = `683`,
+                 "time_to_rpa" = `737`,
+                 "time_to_westmead" = `979`,
+                 "time_to_tamworth" = `848`,
+                 "time_to_waggawagga" = `936`,
+                 "time_to_dubbo" = `251`) %>%
+          # calculate the shortest travel time to an achd clinic
+          mutate(shortest_time_new = pmin(time_to_orange, time_to_newcastle,time_to_canberra,
+                                     time_to_port,time_to_rpa,time_to_westmead,
+                                     time_to_tamworth, time_to_waggawagga, time_to_dubbo),
+                 shortest_time_new = duration(shortest_time_new, "seconds"),
+                 shortest_time_new = as.numeric(shortest_time_new, "hours"),)
+          
+```
+
+
+``` {r}
+sa2.polys.new <- left_join(sa2.polys, htt.nsw %>% select(SA2_5DIGIT, shortest_time_new), by = c('SA2_5DIG16' = 'SA2_5DIGIT'))
+```
+
+``` {r, fig.width = 4, fig.height = 4}
+fig.4 <- ggplot(data = sa2.polys.new) +
+                geom_sf(aes(fill = as.numeric(shortest_time_new, 'hours')), colour = "white", size = 0.01) +
+                geom_point(data = htt.details, aes(x = Longitude,y = Latitude), 
+                          colour = 'black', size = 5, shape = 4) +
+                geom_point(data = htt.details.new, aes(x = Longitude,y = Latitude), 
+                          colour = 'black', size = 5, shape = 1) +
+                scale_fill_viridis(option = 'plasma',
+                                   name = "Driving time to\nnearest clinic (hrs)",
+                                   direction = -1) +
+                theme_void() +
+                theme(legend.text=element_text(size=12),
+                      legend.title=element_text(size=14),
+                      legend.key.size = unit(1, 'cm')
+                      )
+
+fig.4
+```
+
+``` {r}
+# Driectory for plots
+dir.create(here("pub_figures", Sys.Date()))
+# Save the plots - age_plot sex_plot nclinic_plot ltf_plot ndx_plot fig_1 dx_plot
+
+# Figure 1 components, as vectors
+ggsave(here("pub_figures", Sys.Date(), paste("fig1a_age_", Sys.Date(), ".eps", sep = "")), 
+       age_plot, width = 42, height = 35, units = 'cm')
+ggsave(here("pub_figures", Sys.Date(), paste("fig1b_visit_time_", Sys.Date(), ".eps", sep = "")), 
+       ltf_plot, width = 42, height = 35, units = 'cm')
+ggsave(here("pub_figures", Sys.Date(), paste("fig1c_sex_", Sys.Date(), ".eps", sep = "")), 
+       beth_plot, width = 42, height = 60, units = 'cm')
+ggsave(here("pub_figures", Sys.Date(), paste("fig1d_ndiagnosis_", Sys.Date(), ".eps")), 
+       ndx_plot, width = 42, height = 60, units = 'cm')
+ggsave(here("pub_figures", Sys.Date(), paste("fig1e_visit_number_", Sys.Date(), ".eps")), 
+       nclinic_plot, width = 42, height = 60, units = 'cm')
+
+# Figure 1 Layout, as vector
+ggsave(here("pub_figures", Sys.Date(), paste("fig1_layout_", Sys.Date(), ".eps", sep = "")), 
+       fig_1, width = 84, height = 70, units = 'cm')
+```
+
+``` {r}
+# Figure 2, as vector
+ggsave(here("pub_figures", Sys.Date(), paste("fig2_", Sys.Date(), ".eps", sep = "")), 
+       fig_2, width = 84, height = 56, units = 'cm')
+```
+
+``` {r}
+# Figure 3 components, as vectors
+ggsave(here("pub_figures", Sys.Date(), paste("fig3a_all_", Sys.Date(), ".eps")), 
+       fig.3a.all, width = 21, height = 21, units = 'cm')
+ggsave(here("pub_figures", Sys.Date(), paste("fig3b_syd_", Sys.Date(), ".eps")), 
+       fig.3b.syd, width = 21, height = 21, units = 'cm')
+ggsave(here("pub_figures", Sys.Date(), paste("fig3c_act_", Sys.Date(), ".eps")), 
+       fig.3c.act, width = 21, height = 21, units = 'cm')
+
+# Figure 3, as vector
+ggsave(here("pub_figures", Sys.Date(), paste("fig3_", Sys.Date(), ".eps")), 
+       fig_3, width = 84, height = 84, units = 'cm')
+```
+
+``` {r}
+# Figure 4 as a vector
+ggsave(here("pub_figures", Sys.Date(), paste("fig4_", Sys.Date(), ".eps")), 
+       fig.4, width = 21, height = 21, units = 'cm')
+```
+
+
+
