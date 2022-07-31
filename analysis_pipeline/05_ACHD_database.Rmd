@@ -16,7 +16,7 @@ Check how removing missing data affects the demographics.
 knitr::opts_chunk$set(echo = TRUE)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/ACHD_TABLES_2022/'
 
 library(tidyverse)
 library(lubridate)
@@ -38,10 +38,10 @@ The ACHD database contains a number of tables, joined by the person identified "
 _ADMIN_
 ``` {r}
 # Load ADMIN table from ACHD database
-ADMIN <- read.csv(paste(ACHD_path, 'Table_exports/ADMIN.csv', sep="")) %>%
+ADMIN <- read_csv(paste(ACHD_path, 'ADMIN.csv', sep="")) %>%
 #         ------------Clean up the data-------------------------  
           # select columns
-          dplyr::select(person_id, adm_sex, adm_date_of_birth,                                   
+          select(person_id, adm_sex, adm_date_of_birth,                                   
                  adm_suburb_locality, adm_postcode, adm_state_abbreviation) %>%
           # rename columns
           rename('achd_id' = person_id,                                                   
@@ -359,10 +359,10 @@ ADMIN <- ADMIN %>%
 _MAIN_
 ``` {r}
 # Load the MAIN table from the ACHD database
-MAIN <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
+MAIN <- read.csv(paste(ACHD_path, 'main_Table.csv', sep="")) %>%
 #       ------------Clean up the data-------------------------  
         # selecting non-dx variables only
-        select(person_id, SHC, DC, adm_RC, adm_Bethesda, adm_Bethesda_Code, FupStatus, Death_Cause, achd.1) %>%
+        select(person_id, SHC, DC, adm_RC, adm_Bethesda, adm_Bethesda_Code, FupStatus, Death.Cause, achd.1) %>%
          rename('achd_id' = person_id,
                'dx_comment' = achd.1,
                'RC' = adm_RC,
@@ -375,14 +375,14 @@ MAIN <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
 
 ``` {r}
 # Load the MAIN table from the ACHD database
-DX <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
+DX <- read.csv(paste(ACHD_path, 'main_Table.csv', sep=""))%>%
 #       ------------Clean up the data-------------------------  
         # selecting dx variables only
         select(person_id, ABNAO, AbnAV, AbnMV, ABNPV, AbnRV, ABNTV, adm_AbnCA, adm_AbnVeins, adm_AbsentPA, adm_ALCAPA, 
                adm_Aneurism, adm_APwindow, adm_AVfistula, adm_CHB, adm_CorTriatriatum, adm_Gerbodde, 
                adm_Hemi_truncus,adm_LPA_sling, adm_PAV_Malform, adm_Shones, AoC, AoInterrupt, AR, AS, ASD, 
-               AVSD, BAVD, ccTGA, DEXTROCARDIA, DILV, DIRV, DORV, Ebsteins, EISENMENGERS, FONTAN, HLHS, 
-               LVNONCOMPACT, MAPCAs, Other, PA, PAPVD, PAS, PDA, PFO, PS, SubAS, SubPS, SupraAS, SupraMS,
+               AVSD, BAVD, ccTGA, DEXTROCARDIA, DILV, DIRV, DORV, Ebstein.s, EISENMENGER.S, FONTAN, HLHS, 
+               LVNONCOMPACT, MAPCA.s, Other, PA, PAPVD, PAS, PDA, PFO, PS, SubAS, SubPS, SupraAS, SupraMS,
                SupraPS, TA, TAPVD, TGA, TOF, TRUNCART, UnkDx, VSD) %>%
         rename('achd_id' = person_id) %>%
         # PA and and adm_AbsentPA are the same thing (Pulmonary Atresia or Absent Pulmonary Artery)
@@ -392,7 +392,10 @@ DX <- read.csv(paste(ACHD_path, 'Table_exports/main_Table.csv', sep=""))  %>%
 
 # Import the lookup table for EPCC codes, remove the old PA diagnoses
 ACHD_to_EPCC <- read.csv('./input/ACHD_EPCC_coding.csv') %>% 
-                filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA'))
+                filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA')) %>%
+                mutate(Variable = if_else(Variable == "Ebsteins", "Ebstein.s", Variable),
+                       Variable = if_else(Variable == "EISENMENGERS", "EISENMENGER.S", Variable),
+                       Variable = if_else(Variable == "MAPCAs", "MAPCA.s", Variable))
 
 # Change the DX column names to the correct ECC codes
 names(DX) <- ACHD_to_EPCC$EPCC_Code[match(names(DX), ACHD_to_EPCC$Variable)]
@@ -449,7 +452,7 @@ DX <- do.call(apply_labels, c(list(data = DX), EPCC_to_names))
 _DEATH_
 ``` {r}
 # load the DEATH table from the ACHD database
-DEATH <- read.csv(paste(ACHD_path, 'Table_exports/DEATH.csv', sep="")) %>%
+DEATH <- read.csv(paste(ACHD_path, 'DEATH.csv', sep="")) %>%
 #        ------------Clean up the data-------------------------  
          # remove unnecessary columns
          select(person_id, death_date) %>%                             
@@ -483,7 +486,7 @@ ADMIN_sa2 <- left_join(ADMIN, asgs_lookup, by = c("suburb" = "LOCALITY_NAME",
 _FOLLOW UP STATUS_
 ``` {r}
 # load Follow Up Status dataset
-FUP <- read.csv(paste(ACHD_path, 'Table_exports/FOLLOW-UP STATUS.csv', sep="")) %>%
+FUP <- read.csv(paste(ACHD_path, 'FOLLOW-UP STATUS.csv', sep="")) %>%
 #               ------------Clean up the data-------------------------
                 # select columns for id and clinic dates
                 select(person_id, fup_last_date, fup_comment, fup_Seen_by, fup_outreach, fup_new) %>%
@@ -601,7 +604,7 @@ address_cleaning_list <- person.level %>% filter(valid_address == 1) %>%
 
 address_cleaning_list
 
-write.csv(address_cleaning_list, paste(ACHD_path, 'output/test_', Sys.Date(), '.csv', sep=""))
+write.csv(address_cleaning_list, paste("Z:/CURRENT_STUDIES/2020_achd_map/DATA/", 'output/test_', Sys.Date(), '.csv', sep=""))
 ```
 
 __Cleaning Data Types__
@@ -1034,26 +1037,23 @@ _Saving the data_
 Will not run by default to not overwrite data accidentally, change eval = if you need to rewrite the patient data
 ``` {r, eval = TRUE}
 #Save the Master Code Sheet
-library(xlsx)
 # request a password to protect the master code sheet
-mcs_pass <- readline(prompt="enter a password for the mastercode sheet: ")
+# mcs_pass <- readline(prompt="enter a password for the mastercode sheet: ")
 # select the identifiers from the dataset
 master_code_sheet <- person.level.filtered %>% select(achd_id, dob, sex, suburb, postcode, state)
 # write the master code sheet to an excel spreadsheet
-write.xlsx(x = master_code_sheet,
-           file = paste(ACHD_path, 'master_code_sheet/RPAH_master_code_sheet.xlsx', sep=""),
-           sheetName = "master_code_sheet",
-           password = mcs_pass)
+write.csv(x = master_code_sheet,
+           file = paste("Z:/CURRENT_STUDIES/2020_achd_map/DATA/master_code_sheet/", "RPAH_master_code_sheet", Sys.Date(), ".csv", sep=""))
 
 #Save the analysis data set
 analysis_dataset <- person.level.filtered %>% select(-dob, -suburb, -postcode, -state,
                                                      -clinics, -no_clinics, -first_clinic, -last_clinic,
                                                      -date_diff, -age_first_clinic, -age_last_clinic, -gap)
 #write the analysis dataset to a csv file and an R data file
-saveRDS(analysis_dataset, file = paste(ACHD_path, 'output/rpah_analysis_dataset.rds', sep=""))
+saveRDS(analysis_dataset, file = paste("Z:/CURRENT_STUDIES/2020_achd_map/DATA/", "output/rpah_analysis_dataset.rds", sep=""))
 #cannot save the nested 'clinics columns as csv
 analysis_dataset %>% select(-clinics_2000) %>%
-      write.csv(paste(ACHD_path, 'output/rpah_analysis_dataset.csv', sep=""))
+      write.csv(paste("Z:/CURRENT_STUDIES/2020_achd_map/DATA/", 'output/rpah_analysis_dataset.csv', sep=""))
 ```
 
 
