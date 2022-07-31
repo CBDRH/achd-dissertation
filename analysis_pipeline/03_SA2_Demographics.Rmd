@@ -398,17 +398,17 @@ This data contains the distance between each SA2 area in australia and each hosp
 htt <- readRDS(file = "./output/htt_nsw.rds") %>%
 #         ------------Clean up the data-------------------------  
           # select columns, sa2 code and ACHD locations          
-          select(SA2_5DIGIT, `646`, `755`, `152`, `683`, `737`, `979`)%>%
+          select(SA2_5DIGIT, `646`, `408`, `152`, `683`, `737`, `979`)%>%
           # rename locations to something understandable
           dplyr::rename(
                  "time_to_orange" = `646`,
-                 "time_to_nowra" = `755`,
+                 "time_to_newcastle" = `408`,
                  "time_to_canberra" = `152`,
                  "time_to_port" = `683`,
                  "time_to_rpa" = `737`,
                  "time_to_westmead" = `979`) %>%
           # calculate the shortest travel time to an achd clinic
-          mutate(shortest_time = pmin(time_to_orange,time_to_nowra,time_to_canberra,
+          mutate(shortest_time = pmin(time_to_orange,time_to_newcastle,time_to_canberra,
                                      time_to_port,time_to_rpa,time_to_westmead))
 
 ```
@@ -418,7 +418,7 @@ htt <- readRDS(file = "./output/htt_nsw.rds") %>%
 sa2.data17 <- left_join(sa2.data16, htt, by = 'SA2_5DIGIT') %>%
              # Convert the numeric data to duration data (in seconds)
              mutate(time_to_orange = duration(time_to_orange, "seconds"),
-                    time_to_nowra = duration(time_to_nowra, "seconds"),
+                    time_to_newcastle = duration(time_to_newcastle, "seconds"),
                     time_to_canberra = duration(time_to_canberra, "seconds"),
                     time_to_port = duration(time_to_port, "seconds"),
                     time_to_rpa = duration(time_to_rpa, "seconds"),

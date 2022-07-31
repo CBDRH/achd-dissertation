@@ -1,10 +1,37 @@
 ---
-title: "ACHD Report"
-output: html_document
+title: "ACHD Clinic Planning Tool: Automated Report"
+output: 
+  pdf_document:
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{longtable}
+  - \usepackage{array}
+  - \usepackage{multirow}
+  - \usepackage{wrapfig}
+  - \usepackage{float}
+  - \usepackage{colortbl}
+  - \usepackage{pdflscape}
+  - \usepackage{tabu}
+  - \usepackage{threeparttable}
+  - \usepackage{threeparttablex}
+  - \usepackage[normalem]{ulem}
+  - \usepackage{makecell}
+  - \usepackage{xcolor}
+  - \usepackage{float}
+  - \let\origfigure\figure
+  - \let\endorigfigure\endfigure
+  - \renewenvironment{figure}[1][2] {
+      \expandafter\origfigure\expandafter[H]
+    } {
+      \endorigfigure
+    }
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tinytex)
+options(tinytex.verbose = TRUE)
 
 # Allow dunplicate chunk names imported from the Child documents
 options(knitr.duplicate.label = "allow")
@@ -22,12 +49,7 @@ library(leaflet.extras)
 library(tableHTML)
 library(knitr)
 library(kableExtra)
-```
-
-```{css, echo = FALSE}
-.main-container {
-    max-width: 90%;
-}
+library(mapview)
 ```
 
 ```{r, include = FALSE, echo = FALSE}
@@ -77,16 +99,14 @@ mort <- list('0' = 'Alive',
 
 The Patient Dataset had the following filters applied:
 
--   **Selected Genders:** `r sex[input$sb.sex]`\
+-   **Selected Genders:** `r sex[input$sb.sex]`
 -   **CHD Disease Severity:** `r  beth[input$sb.bethesda]`
--   **Age Range:** `r input$sb.age[1]` yrs to `r input$sb.age[2]` yrs\
--   **Time Period:** `r format(as.Date(input$sb.dates[1]), "%d/%m/%Y")` to `r format(as.Date(input$sb.dates[2]), "%d/%m/%Y")`\
--   **Years Since Last Clinic Visit:** `r input$sb.last.clinic[1]` yrs to `r input$sb.last.clinic[2]` yrs\
+-   **Age Range:** `r input$sb.age[1]` yrs to `r input$sb.age[2]` yrs
+-   **Time Period:** `r format(as.Date(input$sb.dates[1]), "%d/%m/%Y")` to `r format(as.Date(input$sb.dates[2]), "%d/%m/%Y")`
+-   **Years Since Last Clinic Visit:** `r input$sb.last.clinic[1]` yrs to `r input$sb.last.clinic[2]` yrs
 -   **Mortality Status:** `r  mort[input$sb.mortality]`
 
-After Filtering, these are some basic demographics of the patient data:
-
-```{r, include = FALSE, echo = FALSE }
+```{r, include = FALSE, echo = FALSE, warning = FALSE, message = FALSE}
 # Table Summarising the Patient data
 pt.summary <- data.frame(
                         # Total number of patients
@@ -123,21 +143,25 @@ row.names(pt.summary) <- c("All", "Simple CHD", "Moderate CHD", "Complex CHD")
 ```{r, echo = FALSE}
 # Display the Table Nicely
 pt.summary %>%
-  kbl(align=rep('r', 3), # right align the data
+  kbl(booktabs = T,
+      align=rep('r', 3), # right align the data
       # Add nice Column Names
       col.names = c("Patients (n)",
                     "Lost to F/up (%)",
                     "Pts < 1 hr drive (%)"),
       # Table caption
-      caption = "<b>Table 1</b>: Number of patients, lost to follow up rates and driving time to clinics;
-                                 by disease severity") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16)
+      caption = "\\textbf{Number of patients, lost to follow up rates and driving time to
+      clinics;by disease severity}") %>%
+  kable_styling(full_width = F,
+                latex_options = "striped",
+                position = "left"
+                )  %>%
+  column_spec(1, width = "8cm")
 ```
 
 ```{r, include = FALSE, echo = FALSE, warning = FALSE, message = FALSE}
 # Plots for patient level demographics
+global_font <- 16
 
 # Age Histogram
 age_plot <- ggplot(achd, aes(x=as.numeric(age, "years"))) +
@@ -145,18 +169,19 @@ age_plot <- ggplot(achd, aes(x=as.numeric(age, "years"))) +
                   labs(y = "Number of Patients", 
                        x = "Age (yrs)") +
                   theme(axis.title.x=element_blank()) +
-                  theme_minimal()
+                  theme_minimal(base_size = global_font)
 
 # Sex Bar Plot
 sex_plot <- achd %>% filter(!is.na(sex)) %>%
                 ggplot(aes(x=sex)) +
                     geom_bar(fill = "light grey", color = "black") +
                     scale_x_discrete(name = "",
-                                     labels=c("1" = "Male", "2" = "Female",
-                                              "4" =  "Neither Female or Male")) +
+                                     labels=str_wrap(c("1" = "Male", "2" = "Female",
+                                              "4" =  "Neither Female or Male"),
+                                              width = 10)) +
                     labs(y = "Number of Patients") +
                     theme(axis.title.x=element_blank()) +
-                    theme_minimal()
+                    theme_minimal(base_size = global_font)
 
 # Number of dx per patients
 ndx_plot <- ggplot(achd, aes(x=as.integer(no_dx)) ) +
@@ -165,7 +190,7 @@ ndx_plot <- ggplot(achd, aes(x=as.integer(no_dx)) ) +
                     labs(x = "Number of Diagnoses", 
                          y = "Number of Patients") +
                     theme() +
-                    theme_minimal() 
+                    theme_minimal(base_size = global_font) 
 
 # Number of Clinic visits per patient
 nclinic_plot <- ggplot(achd, aes(x=no_clinics_2000)) +
@@ -174,7 +199,7 @@ nclinic_plot <- ggplot(achd, aes(x=no_clinics_2000)) +
                         labs(x = "Number of Clinic Visits", 
                              y = "Number of Patients") +
                         theme() +
-                        theme_minimal() 
+                        theme_minimal(base_size = global_font) 
 
 # Time since last visit histogram
 ltf_plot <- ggplot(achd, aes(x=as.numeric(gap_2000, "years"))) +
@@ -182,10 +207,10 @@ ltf_plot <- ggplot(achd, aes(x=as.numeric(gap_2000, "years"))) +
                         labs(y = "Number of Patients", 
                              x = "Time since last clinic visit (yrs)") +
                         theme(axis.title.x=element_blank()) +
-                        theme_minimal()
+                        theme_minimal(base_size = global_font)
 
 # Frequency of each dx
-dx_plot <- dx.data %>% filter(dx_count > 0) %>% 
+dx_plot <- dx.data %>% filter(dx_count > 0) %>% slice_max(dx_count, n = 20) %>%
                           ggplot(aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
                               geom_bar(stat="identity", fill = "light grey", color = "black", size = 0.25) +
                               theme(axis.text.x = element_text(angle = 90)) +
@@ -193,12 +218,10 @@ dx_plot <- dx.data %>% filter(dx_count > 0) %>%
                                    y = "count",
                                    x = "") +
                               coord_flip() +
-                              theme_minimal()
+                              theme_minimal(base_size = 20)
 ```
 
- 
-
-```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=10}
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=10, fig.cap = "Patient level demographics; **A** distribution of patient age, **B** time since patients last clinic visit, **C** distribution of patient sex, **D** the number of diagnoses per patient and **E** number of clinic visits per patient."}
 # Figure 1 - Patient level demograohics
 fig_1 <-ggarrange(
               ggarrange(age_plot, ltf_plot, labels = c("A","B"), nrow = 1),
@@ -209,18 +232,14 @@ fig_1 <-ggarrange(
 fig_1
 ```
 
-**Figure 1:** Patient level demographics; **A** distribution of patient age, **B** time since patients last clinic visit, **C** distribution of patient sex, **D** the number of diagnoses per patient and **E** number of clinic visits per patient.
-
- 
-
-```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=20}
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.width=12, fig.height=20, fig.cap="The top twenty most frequently occuring congenital heart disease diagnoses."}
 # Figure 2 - Frequency of each Diagnosis
 dx_plot
 ```
 
-**Figure 2:** Frequency of each Congential Heart Disease diagnosis appearing in the database
-
 ## Area Data
+
+Areas are the Statistical Area 2 (SA2) geographical boundaries, defined by the Australian Bureau of Statistics, below is a basic summary of the area level data before any new ACHD clinic locations have been selected:
 
 ```{r, echo = FALSE, include = FALSE}
 # Table Summarising the Area level data
@@ -259,28 +278,26 @@ area.summary <- data.frame(
 row.names(area.summary) <- c("All", "Greater Sydney", "Rest of NSW", "ACT")
 ```
 
-Areas are the Statistical Area 2 (SA2) geographical boundaries, defined by the Australian Bureau of Statistics, below is a basic summary of the area level data before any new ACHD clinic locations have been selected:
-
 ```{r, echo = FALSE}
 # Display the Table Nicely
 area.summary %>%
-  kbl(align=rep('r', 4), # Centre the data
+  kbl(booktabs = T,
+      align=rep('r', 4), # Centre the data
       # Add nice Column Names
       col.names = c("Areas (n)",
                   "Areas < 1hr (n)",
                   "Areas < 1hr (%)",
                   "Avg Drive Time (hr)"),
       # Table caption
-      caption = "<b>Table 2</b>: Number of areas within one hour drive
-                 to an ACHD clinic and the average driving time to ACHD clinics") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16)
+      caption = "\\textbf{Number of areas within one hour drive
+                 to an ACHD clinic and the average driving time to ACHD clinics}") %>%
+  kable_styling(full_width = F,
+                latex_options = c("striped", "hold_position"),
+                position = "left"
+                )
 
 ```
 
- \
- 
 
 ```{r, echo = FALSE, include = FALSE}
 # Function to build the driving times for each area plots
@@ -341,103 +358,21 @@ area_st_plot <- function() {
 }
 ```
 
- \
- 
-
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.cap="Distribution of the driving time from each SA2 area to the nearest ACHD clinic, for all of NSW,the Greater Sydney Region, the Rest of NSW and the Australia Capital Territory."}
 # Print the area driving times map
 area_st_plot()
 ```
 
- \
-**Figure 3:** Distribution of the driving time from each SA2 area to the nearest ACHD clinic, for all of NSW,\
-the Greater Sydney Region, the Rest of NSW and the Australia Capital Territory
-
-### Distribution of the ACHD population
-
-The map below shows the number of ACHD patients in each area. Driving times are calculated from the centre of each area.
-
- 
-
-```{r, echo = FALSE, include = FALSE}
-# Current map data is the data (polygons and area data) before new clinics are added. The data from the app will have been
-# editted with new clinics so we will need to rebuild the data as it was before it was editted
-
-# Filter the current map data by gcc region selected
-current_map_data <- merge(sa2.polys, area.achd, by.x = 'NAME16', by.y = 'SA2_NAME')
-# Add area demographics to the spatial information
-current_map_data <- subset(current_map_data, current_map_data$GCC_NAME16 %in% input$drive.gcc)
-
-# Set colour palette from current map data - driving overlay
-current_pal_drive <- colorNumeric("YlOrRd", domain = as.numeric(current_map_data$shortest_time, 'hours'))
-
-# Set colour palette from current map data - layout overlay
-current_pal_loc <- colorNumeric("YlOrRd", domain = current_map_data$ACHD_count)
-
-# Labels for area mouse over
-current_labels <- sprintf(
-            "<strong>%s</strong><br/>
-            %i ACHD patients<br/>
-            Simple: %i | Moderate: %i | Severe: %i<br/>
-            %.1f hr drive to nearest clinic<br/>",
-            current_map_data$NAME16, 
-            current_map_data$ACHD_count,
-            current_map_data$beth_1, current_map_data$beth_2, current_map_data$beth_3,
-            as.numeric(current_map_data$shortest_time, 'hours')
-            ) %>% 
-                lapply(htmltools::HTML)
-```
-
-```{r, echo = FALSE, fig.width=13, fig.height=10, warning = FALSE, message = FALSE}
-# Map showing the number of ACHD patients in each location
-leaflet() %>%
-            addTiles() %>%
-            # Add Polygons
-            addPolygons(
-                    data = current_map_data,
-                    layerId = ~CODE16,
-                    fillColor = ~current_pal_loc(current_map_data$ACHD_count),
-                    weight = 1,
-                    opacity = 1,
-                    color = "white",
-                    dashArray = "3",
-                    fillOpacity = 0.7,
-                    highlight = highlightOptions(
-                        weight = 3,
-                        color = "#666",
-                        dashArray = "",
-                        fillOpacity = 0.7,
-                        bringToFront = TRUE),
-                    label = current_labels,
-                    labelOptions = labelOptions(
-                        style = list("font-weight" = "normal", padding = "3px 8px"),
-                        textsize = "15px",
-                        direction = "auto")) %>%
-                fitBounds(min(set_coords()$long),
-                          min(set_coords()$lat),
-                          max(set_coords()$long),
-                          max(set_coords()$lat)) %>%
-              # Add Legend
-              addLegend(pal = current_pal_loc, 
-                          values = current_map_data$ACHD_count, 
-                          opacity = 0.7, 
-                          title = "ACHD population",
-                          position = "bottomright")
-
-```
-
-**Figure 4:** Map of New South Wales with a Choloropeth showing the number of ACHD patients in each area. Area Boundaries at at the SA2 level
-
- 
+\newpage
 
 ## Current ACHD Clinics in NSW
 
-There are currently 6 Clinic locatios for Adult Congenital Heart Disease Services in NSW. Please note that not all clinic locations are available in the Hospital Travel Times dataset, in these cases, the closest available hospital has been used instead. The table below outlines the clinic matches and the distance between them.
+There are currently 6 Clinic locations for Adult Congenital Heart Disease Services in NSW. Please note that not all clinic locations are available in the Hospital Travel Times data set, in these cases, the closest available hospital has been used instead. The table below outlines the clinic matches and the distance between them.
 
-```{r, echo = FALSE, include = FALSE}
+``` {r, echo = FALSE, include = FALSE}
 # Table to show how the current outreach clinic locations have been matched with the clinics in the HTT datasets
 clinic.matches <- data.frame(
-  achd.clinic = c("Orange Central West Cardiology",
+  achd.clinic =c("Orange Central West Cardiology",
                "Nowra Shoalhaven Cardiology",
                "Canberra More Than Medicine",
                "Port Macquarie Port Macquarie Cardiology",
@@ -455,119 +390,66 @@ clinic.matches <- data.frame(
 )
 ```
 
-```{r, echo = FALSE}
+``` {r, echo = FALSE}
 # Display the table nicely
 clinic.matches %>%
-  kbl(align=c('l','l','r'), # Centre the data
+  kbl(booktabs = T,
+      align=c('l','l','r'), # Centre the data
       # Add nice column name
       col.names = c("Current ACHD Clinics",
                   "Closest HTT Clinics",
                   "Distance between (kms)"),
       # Caption for the table
-      caption = "<b>Table 3</b>: Matching current ACHD clinics to Hospital 
-                 Travel Time (HTT) Clincis") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16)
+      caption = "\\textbf{Matching current ACHD clinics to Hospital 
+                 Travel Time (HTT) Clincis}") %>%
+  kable_styling(full_width = F,
+                latex_options = c("striped", "hold_position"),
+                position = "left"
+                ) %>% 
+  column_spec(c(1,2), width = "20em") %>%
+  column_spec(3, width = "5em")
 ```
 
- 
-
-```{r, echo = FALSE}
+``` {r, echo = FALSE}
 # Table displaying info for current clinics
 drive.values$current_clinic_table %>%
   # Add Total Column
   bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
   #Display the table nicely
-            kbl(align=c('l','r','r'), # Centre the data
+  kbl(booktabs = T,
+      align=c('l','r','r'), # Centre the data
       # Nice Column Names
       col.names = c("Current ACHD Clinics",
                   "Patient within 1hr (n)",
                   "Lost to F/up within 1hr (n)"),
       # Table Caption
-      caption = "<b>Table 4</b>: Number of patients captured by each hospital") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16) 
+      caption = "\\textbf{Number of patients captured by each hospital}") %>%
+  kable_styling(full_width = F,
+                latex_options = c("striped", "hold_position"),
+                position = "left"
+                )%>% 
+  column_spec(c(2,3), width = "7.5em") %>%
+  column_spec(1, width = "30em")
 ```
 
- 
-
-### Average Driving time to ACHD Clinics
-
-The map below details the driving time from each SA2 area in NSW to the nearest ACHD Clinic. Driving times are calculated from the centre of each area.
-
- 
-
-```{r, echo = FALSE, fig.width=13, fig.height=10}
-# Remove NAs from legend
-leg_data <- current_map_data@data %>% filter(!is.na(shortest_time))
-
-# Map showing the driving times to clinics - current clinics only
-leaflet() %>%
-            addTiles() %>%
-            addAwesomeMarkers(
-                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
-                lng = ~Longitude,
-                lat = ~Latitude,
-                label = ~Hospital.name,
-                icon = ~HospitalIcons["Current"]) %>%
-            # Add Polygons
-            addPolygons(
-                data = drive.polys(),
-                layerId = ~CODE16,
-                fillColor = ~current_pal_drive(as.numeric(current_map_data$shortest_time, 'hours')),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = current_labels,
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-                fitBounds(min(set_coords()$long),
-                          min(set_coords()$lat),
-                          max(set_coords()$long),
-                          max(set_coords()$lat)) %>%
-                # Add Legend
-                addLegend(pal = current_pal_drive, 
-                          values = as.numeric(leg_data$shortest_time, 'hours'), 
-                          opacity = 0.7, 
-                          title = "Driving time (hrs)",
-                          position = "bottomright",
-                          layerId = 'drive.legend')
-
-```
-
-**Figure 5:** Map of New South Wales with a Choloropeth showing the driving time in hours from each area to the nearest ACHD clinic. Area Boundaries at at the SA2 level, map markers show ACHD clinic locations.\
- 
-
-```{r, echo = FALSE, results = 'asis'}
-#If there use has selected new clincis, add the New Clinic Report template to the report
+``` {r, echo = FALSE, results = 'asis'}
+#If there user has selected new clincs, add the New Clinic Report template to the report
 if ( length(drive.values$add_clinic_table$Hospital) != 0 ) {
     
-  cat(knit(text = knit_expand("New_Clinic_Report.Rmd"),
+  cat(knit(text = knit_expand("New_Clinic_Report_pdf.Rmd"),
        quiet = TRUE))
   
     }
 ```
 
-```{r, echo = FALSE, results = 'asis'}
+``` {r, echo = FALSE, results = 'asis'}
 # If the user has added areas to the report
 if ( !is.null(drive.values$area.report.list) ) {
      out = NULL
      
      # apply the area report template for each area
         src <- lapply(drive.values$area.report.list,
-                      function(i) knit_expand('Area_Report.Rmd'))
+                      function(i) knit_expand('Area_Report_pdf.Rmd'))
         # render the area reports
         cat(knit(text = src,
                  quiet = TRUE))

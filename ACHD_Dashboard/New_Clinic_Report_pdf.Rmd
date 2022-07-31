@@ -11,94 +11,19 @@ drive.values$add_clinic_table %>%
   # Add Total Column
   bind_rows(summarise_all(., ~if(is.numeric(.)) sum(.) else "Total")) %>%
   #Display the table nicely
-            kbl(align=c('l','r','r'), # Centre the data
+  kbl(booktabs = T,
+      align=c('l','r','r'), # Centre the data
       # Nice Column Names
       col.names = c("New ACHD Clinics",
                   "Patient within 1hr (n)",
                   "Lost to F/up within 1hr (n)"),
       # Table caption
-      caption = "<b>Table 5</b>: Number of patients captured in the new clinics") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16)
+      caption = "\\textbf{Number of patients captured in the new clinics}") %>%
+  kable_styling(full_width = F,
+                latex_options = c("striped", "hold_position"),
+                position = "left"
+                )
 ```
-
-### Average Driving time to ACHD Clinics  
-The map below details the driving time from each SA2 area in NSW to the nearest ACHD Clinic. Driving times are calculated from the centre of each area.
-
-&nbsp;  
-
-``` {r, echo = FALSE, fig.width=13, fig.height=10}
-# Remove NAs from legend
-leg_data_new <- drive.polys()@data %>% filter(!is.na(shortest_time))
-
-new_labels <- sprintf(
-            "<strong>%s</strong><br/>
-            %i ACHD patients<br/>
-            Simple: %i | Moderate: %i | Severe: %i<br/>
-            %.1f hr drive to nearest clinic<br/>",
-            drive.polys()$NAME16, 
-            drive.polys()$ACHD_count,
-            drive.polys()$beth_1, drive.polys()$beth_2, drive.polys()$beth_3,
-            as.numeric(drive.polys()$shortest_time, 'hours')
-            ) %>% 
-                lapply(htmltools::HTML)
-
-# Map showing the driving times to clinics - current and new clinics
-leaflet() %>%
-            addTiles() %>%
-            setView(147.016667, -32.163333, zoom = 5.5) %>%
-            addAwesomeMarkers(
-                data = htt.details %>% filter(Hospital_ID %in% achd_ids),
-                lng = ~Longitude,
-                lat = ~Latitude,
-                label = ~Hospital.name,
-                icon = ~HospitalIcons["Current"]) %>%
-            # Add Polygons
-            addPolygons(
-                data = drive.polys(),
-                layerId = ~CODE16,
-                fillColor = ~current_pal_drive(as.numeric(drive.polys()$shortest_time, 'hours')),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = new_labels,
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-                fitBounds(min(set_coords()$long),
-                          min(set_coords()$lat),
-                          max(set_coords()$long),
-                          max(set_coords()$lat)) %>%
-            # Add Legend
-            addLegend(pal = current_pal_drive, 
-                      values = as.numeric(leg_data$shortest_time, 'hours'), 
-                      opacity = 0.7, 
-                      title = "Driving time (hrs)",
-                      position = "bottomright",
-                      layerId = 'drive.legend')%>%
-            # Add markers for new clinics
-            addAwesomeMarkers(
-                data = htt.details %>% filter(Hospital_ID %in% drive.values$add_clinic_table$ID),
-                lng = ~Longitude,
-                lat = ~Latitude,
-                label = ~Hospital.name,
-                group = "new_markers",
-                icon = ~HospitalIcons["New"])
-
-```
-
-__Figure 6:__ Map of New South Wales with a Choloropeth showing the driving time in hours from each area to the nearest ACHD clinic, with new clinics added. Area Boundaries at at the SA2 level, map markers show ACHD clinic locations, green markers are the current clinics, orange markers are the newly selected clinics.  
-&nbsp;
 
 ``` {r, echo = FALSE, include = FALSE}
 # Table summarising key measures with current clincis only
@@ -167,7 +92,8 @@ row.names(clinic.compare) <- c("Current Clincs Locations", "New Clinics Location
 ``` {r, echo = FALSE}
 # Display the table nicely
 clinic.compare %>%
-            kbl(align=rep('r', 6), # Centre the data
+  kbl(booktabs = T,
+      align=rep('r', 6), # Centre the data
       # Make nice column names
       col.names = c("Patients within 1hr (n)",
                     "Patients within 1hr (%)",
@@ -176,17 +102,19 @@ clinic.compare %>%
                     "Average Drive to ACHD Clinic (hrs)",
                     "Longest Drive to ACHD Clinic (hrs)"),
       # Table caption
-      caption = "<b>Table 6</b>: Comparing the reach of current ACHD clinic locations to
-                                  new ACHD clinic locations") %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16) %>%
-        column_spec(column = 2, width = "3cm")%>% 
-        column_spec(column = 3, width = "3cm") %>% 
-        column_spec(column = 4, width = "3cm") %>% 
-        column_spec(column = 5, width = "3cm") %>% 
-        column_spec(column = 6, width = "3cm") %>% 
-        column_spec(column = 7, width = "3cm")
+      caption = "\\textbf{Comparing the reach of current ACHD clinic locations to
+                                  new ACHD clinic locations}") %>%
+  kable_styling(full_width = F,
+                latex_options = c("striped", "hold_position"),
+                position = "left"
+                ) %>%
+        column_spec(column = 1, width = "2cm") %>% 
+        column_spec(column = 2, width = "2cm") %>% 
+        column_spec(column = 3, width = "2cm") %>% 
+        column_spec(column = 4, width = "2cm") %>% 
+        column_spec(column = 5, width = "2cm") %>% 
+        column_spec(column = 6, width = "2cm") %>% 
+        column_spec(column = 7, width = "2cm")
 ```
 
 
@@ -275,7 +203,8 @@ row.names(pt.summary.compare) <- c("All", "Great Sydney", "Rest of NSW", "Austra
 ``` {r, echo = FALSE}
 # Display the Table Nicely
 pt.summary.compare %>%
-  kbl(align=rep('r', 7), # right align the data
+  kbl(booktabs = T,
+      align=rep('r', 7), # right align the data
       # Add nice Column Names
       col.names = c("Patients (n)",
                     "Patients within 1hr (%)",
@@ -285,18 +214,20 @@ pt.summary.compare %>%
                     "Average Drive to ACHD Clinic (hrs)",
                     "Longest Drive to ACHD Clinic (hrs)"),
       # Table caption
-      caption = "<b>Table 7</b>: Number of patients, and driving time to current clinics and new clinics;
-                                 by region") %>%
+      caption = "\\textbf{Number of patients, and driving time to current clinics and new clinics;
+                                 by region}") %>%
   add_header_above(c(" " = 2, "Current Clinics" = 3, "New Clinics" = 3)) %>%
-  kable_classic_2(full_width = F, position = "left",
-                  html_font = "Cambria",
-                  font_size = 16) %>%
-        column_spec(column = 2, width = "3cm")%>% 
-        column_spec(column = 3, width = "3cm") %>% 
-        column_spec(column = 4, width = "3cm") %>% 
-        column_spec(column = 5, width = "3cm") %>% 
-        column_spec(column = 6, width = "3cm") %>% 
-        column_spec(column = 7, width = "3cm") %>%
-        column_spec(column = 8, width = "3cm")
+  kable_styling(full_width = F,
+                latex_options = c("striped", "hold_position", "scale_down"),
+                position = "left"
+                )%>%
+        column_spec(column = 1, width = "2cm") %>% 
+        column_spec(column = 2, width = "1cm") %>% 
+        column_spec(column = 3, width = "2cm") %>% 
+        column_spec(column = 4, width = "2cm") %>% 
+        column_spec(column = 5, width = "2cm") %>% 
+        column_spec(column = 6, width = "2cm") %>% 
+        column_spec(column = 7, width = "2cm") %>%
+        column_spec(column = 8, width = "2cm")
 ```
 

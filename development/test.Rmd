@@ -20,7 +20,7 @@ library(sjmisc)
 
 ``` {r message=FALSE, warning=FALSE, include=FALSE}
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map'
+pt_data <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- '../ACHD_Dashboard/data/'
@@ -76,12 +76,12 @@ filter.data <- function(data,
 ```
 
 ``` {r}
-sb.mortality <- c(0)
+sb.mortality <- c(0,1)
 sb.sex <- c(1,2,4)
-sb.bethesda <- c(1,2,3)
-sb.age <- c(18,110)
+sb.bethesda <- c(1,2,3,4)
+sb.age <- c(11,111)
 sb.dates <- c("2000-01-01", "2020-12-31")
-sb.last.clinic <- c(10, 21)
+sb.last.clinic <- c(0, 22)
 
 achd.filtered <- filter.data(achd,
                              sb.mortality,
@@ -121,7 +121,7 @@ if (input == 2) {
             achd.df <- achd %>% dplyr::rename("area"= sa4)}
 
 area.achd <- achd.df %>%
-              group_by(area) %>%
+              group_by(area, gcc) %>%
               dplyr::summarise(ACHD_count = n(), 
                         beth_1 = sum(bethesda_code == 1),
                         beth_2 = sum(bethesda_code == 2), 
@@ -149,6 +149,7 @@ area.dx <- area.data %>% filter(SA2_5DIGIT == 11007) %>% select(dx_codes$EPCC_Co
             mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)])
 
 ```
+
 ``` {r}
 ggplot(area.dx, aes(x = dx_label, y=dx_count)) + 
                     geom_bar(stat="identity") +
@@ -258,33 +259,5 @@ polys$CODE16[polys$NAME16 == 'Riverina']
 polys$NAME16[polys$CODE16 == id]
 ```
 
-
-%>%
-            addPolygons(
-                data = drive.polys(),
-                layerId = ~CODE16,
-                fillColor = ~pal.drive()(as.numeric(drive.polys()$shortest_time, 'hours')),
-                weight = 1,
-                opacity = 1,
-                color = "white",
-                dashArray = "3",
-                fillOpacity = 0.7,
-                highlight = highlightOptions(
-                    weight = 3,
-                    color = "#666",
-                    dashArray = "",
-                    fillOpacity = 0.7,
-                    bringToFront = TRUE),
-                label = labels.drive(),
-                labelOptions = labelOptions(
-                    style = list("font-weight" = "normal", padding = "3px 8px"),
-                    textsize = "15px",
-                    direction = "auto")) %>%
-            addLegend(pal = pal.drive(), 
-                      values = bins.drive(), 
-                      opacity = 0.7, 
-                      title = "Driving time to clinics",
-                      position = "bottomright")
-        
 
 

@@ -61,16 +61,25 @@ header <- dashboardHeader(title = "Clinic Planning Tool")
 sidebar <- dashboardSidebar(
     sidebarMenu(
         # Welcome Page
-        menuItem("Welcome", tabName = "welcome", icon = icon("info")),
+        menuItem("Welcome", tabName = "welcome"),
         # Snapshot tab
-        menuItem("Snapshot of ACHD", tabName = "snapshot", icon = icon("file-medical")),
+        menuItem("Snapshot of ACHD", tabName = "snapshot"),
         # Driving tab
-        menuItem("Clinic Planning", tabName = "driving", icon = icon("map-marker-alt")),
+        menuItem("Clinic Planning", tabName = "driving"),
         
         # Report Download Button
         h4("Download Report"),
-        downloadButton("report.dl", "Download", icon=icon("download")),
-        tags$head(tags$style(".dl_butt{color:blue;}")),
+        div(style="display:inline-block",
+            downloadButton("html.download", "HTML Report", icon = NULL,
+                           style = "height: 50px; width: 75%; font-size: 14px; 
+                                    float:centre; margin: 0px 0px 0px 15px; color: #fff; 
+                                    background-color: #27ae60; border-color: #fff")), # HTML Download
+        div(style="display:inline-block",
+            downloadButton("pdf.download", "PDF Report",  icon = NULL,
+                           style = "height: 50px; width: 75%; font-size: 14px; 
+                                    float:centre; color: #fff; 
+                                    background-color: #27ae60; border-color: #fff")), # PDF Download
+        
         
         # Global Filters
         h4("Global Filters"), # Title
@@ -386,12 +395,12 @@ server <- function(input, output) {
         
         {achd %>% 
             filter(death %in% input$sb.mortality) %>% # Filter by mortality status
-            filter(sex %in% input$sb.sex) %>% # filter by sex
+            filter(is.na(sex) | sex %in% input$sb.sex) %>% # filter by sex
             filter(bethesda_code %in% input$sb.bethesda) %>% # Filter by Disease Severity
             filter(as.numeric(age, 'years') >= input$sb.age[1]) %>% # Filter by Age; lower bound
             filter(as.numeric(age, 'years') <= input$sb.age[2]) %>% # Filter by Age; upper bound
-            filter(as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>% # Filter by last clinic date; lower bound
-            filter(as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>% # filter by last clinic date; upper bound
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>% # Filter by last clinic date; lower bound
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>% # filter by last clinic date; upper bound
             
             # Filtering by the selected date range. This is quite a slow process and will only run is the date range 
             # is altered from the default, which is all-inclusive
@@ -456,6 +465,16 @@ server <- function(input, output) {
     })
     
 ############################# SIDEBAR #################################
+    #-------------------- UI elements for Report Download--------------#
+    # PDF/HTML Selector
+    output$download.type <- renderUI ({
+      checkboxGroupInput("sb.bethesda", "Disease severity",
+                         choices = c('Simple' = 1,
+                                     'Moderate' = 2,
+                                     'Complex' = 3,
+                                     'Unknown' = 4),
+                         selected = c(1, 2, 3, 4))
+    })
     
     #-------------------- UI elements for Global Fitlers--------------#
     # Filter by Disease Severity
@@ -465,7 +484,7 @@ server <- function(input, output) {
                                        'Moderate' = 2,
                                        'Complex' = 3,
                                        'Unknown' = 4),
-                           selected = c(1, 2, 3))
+                           selected = c(1, 2, 3, 4))
     })
     
     # Filter by Sex
@@ -1326,7 +1345,8 @@ server <- function(input, output) {
     
     
 ############################# DOWNLOAD REPORT #################################
-    output$report.dl <- downloadHandler(
+    #HTML Report
+    output$html.download <- downloadHandler(
       # Report Filename
       filename = paste(Sys.Date(), "ACHD_Report.html", sep = "_"),
       
@@ -1342,6 +1362,30 @@ server <- function(input, output) {
         file.copy("Report.Rmd", tempReport, overwrite = TRUE)
         file.copy("Area_Report.Rmd", tempAreaReport, overwrite = TRUE)
         file.copy("New_Clinic_Report.Rmd", tempClinicReport, overwrite = TRUE)
+        
+        rmarkdown::render(tempReport, output_file = file)
+        
+      }
+      
+    )
+    
+    # PDF Report
+    output$pdf.download <- downloadHandler(
+      # Report Filename
+      filename = paste(Sys.Date(), "ACHD_Report.pdf", sep = "_"),
+      
+      content = function(file) {
+        # Copy the report file to a temporary directory before processing it, in
+        # case we don't have write permissions to the current working dir (which
+        # can happen when deployed).
+        
+        tempReport <- file.path(tempdir(), "Report_pdf.Rmd")
+        tempAreaReport <- file.path(tempdir(), "Area_Report_pdf.Rmd")
+        tempClinicReport <- file.path(tempdir(), "New_Clinic_Report_pdf.Rmd")
+        
+        file.copy("Report_pdf.Rmd", tempReport, overwrite = TRUE)
+        file.copy("Area_Report_pdf.Rmd", tempAreaReport, overwrite = TRUE)
+        file.copy("New_Clinic_Report_pdf.Rmd", tempClinicReport, overwrite = TRUE)
         
         rmarkdown::render(tempReport, output_file = file)
         
