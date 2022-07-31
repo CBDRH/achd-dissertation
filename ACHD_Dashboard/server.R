@@ -69,8 +69,8 @@ function(input, output) {
     # Filter by Time Period
     output$out.dates <- renderUI ({
         dateRangeInput("sb.dates", "Select a time period:",
-                       start = "2000-01-01", end = "2020-12-31",
-                       min = "2000-01-01", max = "2020-12-31",
+                       start = "2000-01-01", end = "2022-12-31",
+                       min = "2000-01-01", max = "2022-12-31",
                        format = "dd/mm/yyyy")
     })
     
@@ -78,8 +78,8 @@ function(input, output) {
     output$out.last.clinic <- renderUI ({ 
         sliderInput('sb.last.clinic', 'Time since last clinic visit',
                     min = 0,
-                    max = 21,
-                    value = c(0,21),
+                    max = 23,
+                    value = c(0,23),
                     round = TRUE)
     })
     
