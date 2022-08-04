@@ -35,17 +35,26 @@ dashboardPage(
                             sidebarLayout(
                                 
                                 sidebarPanel(width=2, height=900, style="background-color: white",
-                                             
+                                    # Load Patient Data
+                                    h4("To Begin...."),
+                                    # Button to load patient data
+                                    actionButton('load.data', 
+                                                 HTML("Load Patient Data"),
+                                                 style ="display:block;
+                                       height: 102px;
+                                       width: 175px;
+                                       border: 2px solid black;
+                                       font-size: 150%;" ),
                                     # Report Download Button
                                     h4("Download Report"),
                                     div(style="display:inline-block",
-                                        downloadButton("html.download", "HTML Report", icon = NULL,
-                                                       style = "height: 50px; width: 75%; font-size: 14px; 
-                                                                float:centre; margin: 0px 0px 0px 15px; color: #fff; 
+                                        downloadButton("html.download", str_wrap("HTML", width = 1), icon = NULL,
+                                                       style = "height: 50px; width: 100%; font-size: 14px; 
+                                                                float:centre; margin: 0px 0px 0px 0px; color: #fff; 
                                                                 background-color: #27ae60; border-color: #fff")), # HTML Download
                                     div(style="display:inline-block",
-                                        downloadButton("pdf.download", "PDF Report",  icon = NULL,
-                                                       style = "height: 50px; width: 75%; font-size: 14px; 
+                                        downloadButton("pdf.download", "PDF",  icon = NULL,
+                                                       style = "height: 50px; width: 100%; font-size: 14px; 
                                                                 float:centre; color: #fff; 
                                                                 background-color: #27ae60; border-color: #fff")), # PDF Download
                                     br(),     
@@ -149,38 +158,6 @@ dashboardPage(
                                 ) # Closes main panel
                             ) # Closes sidebarLayout
                         ), # Closes Home panel
-                   
-                    tabPanel("", value = 'snapshot', icon = icon('chart-column'),
-                            #Title bar
-                            fluidRow(
-                                valueBox("Snapshot of ACHD Patients in NSW",
-                                         "An overview of the ACHD patients in NSW; 
-                                                 Their basic demographics, what diagnoses they and how many?",
-                                         width = 12,
-                                         color = 'olive')
-                            ),
-                            
-                            # Summary Values
-                            fluidRow(valueBoxOutput('pt.count.ss', width = 3),
-                                     valueBoxOutput('simple.count.ss', width = 3),
-                                     valueBoxOutput('moderate.count.ss', width = 3),
-                                     valueBoxOutput('complex.count.ss', width = 3)
-                            ),
-                            
-                            # Plots
-                            fluidRow(uiOutput("age_box"),
-                                     uiOutput("ltf_box")
-                            ),
-                            fluidRow(
-                                box(uiOutput("sex_box"), width = 4),
-                                box(uiOutput("ndx_box"), width = 4),
-                                box(uiOutput("nclinic_box"), width = 4)
-                            ),
-                            fluidRow(
-                                uiOutput("dx_box")
-                                
-                            )
-                    ), # Closes snapshot panel
     
                 # Info panel
                    tabPanel("", value = 'info', icon = icon('info-circle'),

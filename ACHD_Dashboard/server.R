@@ -847,69 +847,69 @@ function(input, output) {
         
         #---------------AREA SUMMARY-----------#
         output$area.output <- renderUI({
-            div(style = 'overflow-y:scroll;height:580px;',
-                h2(HTML(paste("Area Focus", icon('map')))),
-                hr(),
-                    div(style="display:inline-block",actionButton('area.button', 'Add to report and close')),
-                    div(style="display:inline-block",actionButton("area.reset", "Cancel")),
-                    HTML(paste(
-                        "
+          div(style = 'overflow-y:scroll;height:580px;',
+              box(h2("Area Focus"),
+                  div(style="display:inline-block",actionButton('area.button', 'Add to report')),
+                  div(style="display:inline-block",actionButton("area.reset", "Reset")),
+                  HTML(paste(
+                    "
             <br><br>
             <b>Selected Areas:</b> ", paste(drive.values$event_area$SA2_NAME, collapse = ', '), "<br>
             <br>
-            <b>Number of ACHD Patients:</b> ", mask.achd(sum(drive.values$event_area$ACHD_count), 'str'),"<br>
+            <b>Number of ACHD Patients:</b> ", sum(drive.values$event_area$ACHD_count),"<br>
             <br>
             <b>Number with:</b> <br>
             <ul>
-              <li>Simple CHD: ",mask.achd(sum(drive.values$event_area$beth_1), 'str'),"</li>
-              <li>Moderate CHD: ",mask.achd(sum(drive.values$event_area$beth_2), 'str'),"</li> 
-              <li>Complex CHD: ",mask.achd(sum(drive.values$event_area$beth_3), 'str'),"</li>
+              <li>Simple CHD: ",sum(drive.values$event_area$beth_1),"</li>
+              <li>Moderate CHD: ",sum(drive.values$event_area$beth_2),"</li> 
+              <li>Complex CHD: ",sum(drive.values$event_area$beth_3),"</li>
             </ul>
             <b>Number of Patients lost to follow up:</b><br> 
             <ul>
-              <li>",mask.achd(sum(drive.values$event_area$ltf_3), 'str'),"</li>
+              <li>",sum(drive.values$event_area$ltf_3),"</li>
             </ul>
             <b>Index of Relative Socio-economic Disadvantage</b><br>
               (1 = most disadvantaged, 10 = least disadvantaged): <br>
               <ul>",
-                        paste("<li>", drive.values$event_area$SA2_NAME, ": ", 
-                              drive.values$event_area$IRSD, "</li>", collapse = ""),
-                        "</ul>
+                    paste("<li>", drive.values$event_area$SA2_NAME, ": ", 
+                          drive.values$event_area$IRSD, "</li>", collapse = ""),
+                    "</ul>
             <b>Aboriginal and Torres Strait Islander Population</b><br>
             <ul>
                 <li>Total: ",sum(drive.values$event_area$atsi),"</li>
                 <li>Percent: ",percent(sum(drive.values$event_area$atsi) / 
-                                           sum(drive.values$event_area$total_pop)),"</li>
+                                         sum(drive.values$event_area$total_pop)),"</li>
             </ul>
             <b>Accessibility and Remoteness Index of Australia</b><br>
             (percentage of population living in):<br>  
             <ul>
                 <li>Major Cities: ",percent(sum(drive.values$event_area$major_cities) / 
-                                                length(drive.values$event_area$SA2_NAME)),"</li>
-                <li>Inner Regional:",percent(sum(drive.values$event_area$inner_regional) / 
-                                                 length(drive.values$event_area$SA2_NAME)),"</li>
-                <li>Outer Regional:",percent(sum(drive.values$event_area$outer_regional) / 
-                                                 length(drive.values$event_area$SA2_NAME)),"</li> 
-                <li>Remote:",percent(sum(drive.values$event_area$remote) / 
-                                         length(drive.values$event_area$SA2_NAME)),"</li>
-                <li>Very Remote:",percent(sum(drive.values$event_area$very_remote) / 
                                               length(drive.values$event_area$SA2_NAME)),"</li>
+                <li>Inner Regional:",percent(sum(drive.values$event_area$inner_regional) / 
+                                               length(drive.values$event_area$SA2_NAME)),"</li>
+                <li>Outer Regional:",percent(sum(drive.values$event_area$outer_regional) / 
+                                               length(drive.values$event_area$SA2_NAME)),"</li> 
+                <li>Remote:",percent(sum(drive.values$event_area$remote) / 
+                                       length(drive.values$event_area$SA2_NAME)),"</li>
+                <li>Very Remote:",percent(sum(drive.values$event_area$very_remote) / 
+                                            length(drive.values$event_area$SA2_NAME)),"</li>
             </ul>
             <b>Driving time to nearest clinic:</b><br> 
             <ul>",
-                        paste("<li>",drive.values$event_area$SA2_NAME,":</li>  
+                    paste("<li>",drive.values$event_area$SA2_NAME,":</li>  
                  <ul>
                     <li>Current Locations: ", 
-                              round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% drive.values$map.clicks], 'hours'), 
-                                    digits = 2)," hrs</li>
+                          round(as.numeric(drive.area.achd()$shortest_time[drive.area.achd()$SA2_5DIGIT %in% drive.values$map.clicks], 'hours'), 
+                                digits = 2)," hrs</li>
                     <li>New Locations: ", 
-                              round(as.numeric(drive.values$event_area$shortest_time, 'hours'), digits = 2)," hrs</li>
+                          round(as.numeric(drive.values$event_area$shortest_time, 'hours'), digits = 2)," hrs</li>
                  </ul>", collapse = ""),   
-                        "</ul>
+                    "</ul>
             ")
-                    ),
-                    width = 12
-                )
+                  ),
+                  width = 12
+              )
+          )
         })
         
         #---------------AREA DIAGNOSES-----------#
@@ -930,14 +930,13 @@ function(input, output) {
                 t() %>% as.data.frame() %>%
                 rename("dx_count" = V1) %>% 
                 mutate(dx_label = dx_codes$Adjust_name[match(row.names(.), dx_codes$EPCC_Code)]) %>%
-                filter(dx_count > 0) %>%
-                mutate(dx_count = if_else(dx_count<5, 5, dx_count))
+                filter(dx_count > 0)
             
             ggplot(data = dx.area.data, aes(x = reorder(dx_label, dx_count), y=dx_count)) + 
                 geom_bar(stat="identity") +
                 scale_y_continuous(breaks = seq(0, max(dx.area.data$dx_count), 1)) +
                 theme(axis.text.x = element_text(angle = 90)) +
-                labs(title = "For privacy, counts of less than 5 have been displayed as 5", 
+                labs(title = "", 
                      y = "count",
                      x = "") +
                 coord_flip()
