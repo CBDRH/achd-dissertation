@@ -16,7 +16,7 @@ Check how removing missing data affects the demographics.
 knitr::opts_chunk$set(echo = TRUE)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/ACHD_TABLES_2022/'
+ACHD_path <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/Table_exports_2022/'
 
 
 library(tidyverse)
