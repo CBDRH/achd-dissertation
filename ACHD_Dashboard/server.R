@@ -37,7 +37,7 @@ function(input, output) {
                                        'Moderate' = 2,
                                        'Complex' = 3,
                                        'Unknown' = 4),
-                           selected = c(1, 2, 3))
+                           selected = c(1, 2, 3, 4))
     })
     
     # Filter by Sex
@@ -62,15 +62,15 @@ function(input, output) {
         sliderInput('sb.age', 'Age',
                     min = 18,
                     max = 110,
-                    value = c(18, 110),
+                    value = c(18, 111),
                     round = TRUE)
     })
     
     # Filter by Time Period
     output$out.dates <- renderUI ({
         dateRangeInput("sb.dates", "Select a time period:",
-                       start = "2000-01-01", end = "2022-12-31",
-                       min = "2000-01-01", max = "2022-12-31",
+                       start = "2000-01-01", end = "2022-07-01",
+                       min = "2000-01-01", max = "2022-07-01",
                        format = "dd/mm/yyyy")
     })
     
@@ -93,7 +93,7 @@ function(input, output) {
                                            'Moderate' = 2,
                                            'Complex' = 3,
                                            'Unknown' = 4),
-                               selected = c(1, 2, 3))
+                               selected = c(1, 2, 3, 4))
         })
         # Sex
         output$out.sex <- renderUI ({
@@ -115,22 +115,22 @@ function(input, output) {
             sliderInput('sb.age', 'Age',
                         min = 18,
                         max = 110,
-                        value = c(18, 110),
+                        value = c(18, 111),
                         round = TRUE)
         })
         # Time Period
         output$out.dates <- renderUI ({
             dateRangeInput("sb.dates", "Select a time period:",
-                           start = "2000-01-01", end = "2020-12-31",
-                           min = "2000-01-01", max = "2020-12-31",
+                           start = "2000-01-01", end = "2020-07-01",
+                           min = "2000-01-01", max = "2020-07-01",
                            format = "dd/mm/yyyy")
         })
         # Time Since Last Visit
         output$out.last.clinic<- renderUI ({ 
             sliderInput('sb.last.clinic', 'Time since last clinic visit',
                         min = 0,
-                        max = 21,
-                        value = c(0,21),
+                        max = 23,
+                        value = c(0,23),
                         round = TRUE)
         })
     })
