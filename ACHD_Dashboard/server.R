@@ -9,7 +9,7 @@ function(input, output) {
     
     ############################# GLOBAL REACTIVE FUNCTIONS #################################
     
-    # Global Filters - not active in public version
+    # Global Filters
     achd.filtered <- eventReactive( 
       
       c(input$sb.update,
@@ -24,9 +24,9 @@ function(input, output) {
           filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') >= input$sb.last.clinic[1]) %>% # Filter by last clinic date; lower bound
           filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') <= input$sb.last.clinic[2]) %>% # filter by last clinic date; upper bound
           
-          # Filtering by the selected date range. This is quite a slow process and will only run is the date range 
+          # Filtering by the selected date range. This is quite a slow process and will only run if the date range 
           # is altered from the default, which is all-inclusive
-          {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2022-12-31") )
+          {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2022-07-01") )
             mutate(., 
                    clinics_2000 = map(clinics_2000, ~ .x %>%
                                         mutate(clinic_in_period = 
@@ -36,6 +36,7 @@ function(input, output) {
                    in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)) %>% 
               filter(in_time_period == TRUE)
             else . }
+        
       }) #close achd.filtered
     
     # count frequency of diagnoses - not active in public version
@@ -96,7 +97,7 @@ function(input, output) {
                                        'Moderate' = 2,
                                        'Complex' = 3,
                                        'Unknown' = 4),
-                           selected = c(1, 2, 3))
+                           selected = c(1, 2, 3, 4))
     })
     
     # Filter by Sex
@@ -120,16 +121,16 @@ function(input, output) {
     output$out.age <- renderUI ({
         sliderInput('sb.age', 'Age',
                     min = 18,
-                    max = 110,
-                    value = c(18, 110),
+                    max = 111,
+                    value = c(18, 111),
                     round = TRUE)
     })
     
     # Filter by Time Period
     output$out.dates <- renderUI ({
         dateRangeInput("sb.dates", "Select a time period:",
-                       start = "2000-01-01", end = "2022-12-31",
-                       min = "2000-01-01", max = "2022-12-31",
+                       start = "2000-01-01", end = "2022-07-01",
+                       min = "2000-01-01", max = "2022-07-01",
                        format = "dd/mm/yyyy")
     })
     
@@ -152,7 +153,7 @@ function(input, output) {
                                            'Moderate' = 2,
                                            'Complex' = 3,
                                            'Unknown' = 4),
-                               selected = c(1, 2, 3))
+                               selected = c(1, 2, 3, 4))
         })
         # Sex
         output$out.sex <- renderUI ({
@@ -174,14 +175,14 @@ function(input, output) {
             sliderInput('sb.age', 'Age',
                         min = 18,
                         max = 110,
-                        value = c(18, 110),
+                        value = c(18, 111),
                         round = TRUE)
         })
         # Time Period
         output$out.dates <- renderUI ({
             dateRangeInput("sb.dates", "Select a time period:",
-                           start = "2000-01-01", end = "2022-12-31",
-                           min = "2000-01-01", max = "2022-12-31",
+                           start = "2000-01-01", end = "2022-07-01",
+                           min = "2000-01-01", max = "2022-07-01",
                            format = "dd/mm/yyyy")
         })
         # Time Since Last Visit

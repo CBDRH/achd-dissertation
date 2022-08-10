@@ -14,7 +14,7 @@ library(here)
 
 ``` {r}
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA'
+pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/'
 ```
 
 ``` {r}
@@ -25,6 +25,60 @@ achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""
 dx_codes <- read.csv(file = here("analysis_pipeline", "input", "ACHD_EPCC_coding.csv"), fileEncoding="UTF-8-BOM") %>% 
             filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
             select(!c(ACHD_Database_name, check., Variable))
+```
+
+
+```{r}
+filter.data <- function(data,
+                          sb.mortality,
+                          sb.sex,
+                          sb.bethesda,
+                          sb.age,
+                          sb.dates,
+                          sb.last.clinic) 
+       {
+        data %>% 
+            filter(death %in% sb.mortality) %>%
+            filter(is.na(sex) | sex %in% sb.sex) %>%
+            filter(bethesda_code %in% sb.bethesda) %>%
+            filter(as.numeric(age, 'years') >= sb.age[1]) %>%
+            filter(as.numeric(age, 'years') <= sb.age[2]) %>%
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') >= sb.last.clinic[1]) %>%
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') <= sb.last.clinic[2]) %>%
+    
+            {if( !(sb.dates[1] == "2000-01-01" & sb.dates[2] == "2021-07-01") )
+              
+              mutate(., clinics_2000 = map(clinics_2000, ~ .x %>%
+                                        mutate(
+                                          clinic_in_period = 
+                                            sapply(.$clinic_date, 
+                                                   function(x) x %within% (as.Date(sb.dates[1])
+                                                                          %--% 
+                                                                          as.Date(sb.dates[2]))))),
+                   in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)
+                   ) %>%
+              filter(in_time_period == TRUE)
+              
+              else . }
+       }
+```
+
+``` {r}
+sb.mortality <- c(0)
+sb.sex <- c(1,2,4)
+sb.bethesda <- c(1,2,3,4)
+sb.age <- c(11,111)
+sb.dates <- c("2000-01-01", "2022-07-01")
+sb.last.clinic <- c(0, 23)
+
+achd.filtered <- filter.data(achd,
+                             sb.mortality,
+                             sb.sex,
+                             sb.bethesda,
+                             sb.age,
+                             sb.dates,
+                             sb.last.clinic)
+                
 ```
 
 
@@ -63,7 +117,7 @@ prepare.area.data <- function(achd_data) {
 ```
 
 ``` {r}
-achd.area <- prepare.area.data(achd) %>%
+achd.area <- prepare.area.data(achd.filtered) %>%
                 rename("SA2_NAME" = sa2)
 
 ```

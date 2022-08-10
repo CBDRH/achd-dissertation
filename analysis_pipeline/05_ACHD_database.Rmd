@@ -16,7 +16,7 @@ Check how removing missing data affects the demographics.
 knitr::opts_chunk$set(echo = TRUE)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/ACHD_TABLES_2022/'
+ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/'
 
 library(tidyverse)
 library(lubridate)
@@ -38,7 +38,7 @@ The ACHD database contains a number of tables, joined by the person identified "
 _ADMIN_
 ``` {r}
 # Load ADMIN table from ACHD database
-ADMIN <- read_csv(paste(ACHD_path, 'ADMIN.csv', sep="")) %>%
+ADMIN <- read_csv(paste(ACHD_path, 'Table_exports_2022/ADMIN.csv', sep="")) %>%
 #         ------------Clean up the data-------------------------  
           # select columns
           select(person_id, adm_sex, adm_date_of_birth,                                   
@@ -359,7 +359,7 @@ ADMIN <- ADMIN %>%
 _MAIN_
 ``` {r}
 # Load the MAIN table from the ACHD database
-MAIN <- read.csv(paste(ACHD_path, 'main_Table.csv', sep="")) %>%
+MAIN <- read.csv(paste(ACHD_path, 'Table_exports_2022/main_Table.csv', sep="")) %>%
 #       ------------Clean up the data-------------------------  
         # selecting non-dx variables only
         select(person_id, SHC, DC, adm_RC, adm_Bethesda, adm_Bethesda_Code, FupStatus, Death.Cause, achd.1) %>%
@@ -375,7 +375,7 @@ MAIN <- read.csv(paste(ACHD_path, 'main_Table.csv', sep="")) %>%
 
 ``` {r}
 # Load the MAIN table from the ACHD database
-DX <- read.csv(paste(ACHD_path, 'main_Table.csv', sep=""))%>%
+DX <- read.csv(paste(ACHD_path, 'Table_exports_2022/main_Table.csv', sep=""))%>%
 #       ------------Clean up the data-------------------------  
         # selecting dx variables only
         select(person_id, ABNAO, AbnAV, AbnMV, ABNPV, AbnRV, ABNTV, adm_AbnCA, adm_AbnVeins, adm_AbsentPA, adm_ALCAPA, 
@@ -451,7 +451,7 @@ DX <- do.call(apply_labels, c(list(data = DX), EPCC_to_names))
 _DEATH_
 ``` {r}
 # load the DEATH table from the ACHD database
-DEATH <- read.csv(paste(ACHD_path, 'DEATH.csv', sep="")) %>%
+DEATH <- read.csv(paste(ACHD_path, 'Table_exports_2022/DEATH.csv', sep="")) %>%
 #        ------------Clean up the data-------------------------  
          # remove unnecessary columns
          select(person_id, death_date) %>%                             
@@ -485,7 +485,7 @@ ADMIN_sa2 <- left_join(ADMIN, asgs_lookup, by = c("suburb" = "LOCALITY_NAME",
 _FOLLOW UP STATUS_
 ``` {r}
 # load Follow Up Status dataset
-FUP <- read.csv(paste(ACHD_path, 'FOLLOW-UP STATUS.csv', sep=""))  %>%
+FUP <- read.csv(paste(ACHD_path, 'Table_exports_2022/FOLLOW-UP STATUS.csv', sep=""))  %>%
 #               ------------Clean up the data-------------------------
                 # select columns for id and clinic dates
                 select(person_id, fup_last_date, fup_comment, fup_Seen_by, fup_outreach, fup_new) %>%
@@ -528,15 +528,12 @@ person.level <- left_join(ADMIN_sa2, MAIN, by = "achd_id") %>%
                 mutate(age_death = as.period(dob %--% death_date)) %>% 
                 # add data from Follow Up Status table
                 nest_join(FUP, by = 'achd_id') %>%
-                rename( 'clinics' =  FUP)
+                rename( 'clinics' =  FUP) %>%
+                # Clean up the Bethesda Code
+                mutate(bethesda_code = if_else(is.na(bethesda_code), 4, bethesda_code))
 ```
 
 The dataframes contained in `clinics` column looks like this (for one record):
-
-``` {r}
-# display one of the clinic_dates dataframes
-person.level %>% filter(achd_id == 1101) %>% .$clinics
-```
 
 
 To get some more information about the clinic visits for each patient, we will pull some information out of the `clinics` column
@@ -559,7 +556,7 @@ person.level <- person.level %>%
               age_last_clinic = as.period(dob %--% last_clinic),
               # time since last clinic attendance
               gap = case_when(
-                death == 0 ~ as.duration(as.Date('31/12/2020', format='%d/%m/%Y') - last_clinic),
+                death == 0 ~ as.duration(as.Date('01/07/2022', format='%d/%m/%Y') - last_clinic),
                 death == 1 ~ as.duration(death_date - last_clinic),
                ))
 ```
@@ -627,12 +624,6 @@ person.level$dx_comment <- as.character(person.level$dx_comment)
 person.level <- do.call(apply_labels, c(list(data = person.level), EPCC_to_names))
 ```
 
-
-``` {r}
-print('Variables and data types')
-sapply(person.level, class)
-```
-
 __EDA__  
 The data cleaning above has created three variables that we will use to filter out invalid records  
     - age_flag: flags people 18 and over (1) or below 18 (0)  
@@ -643,20 +634,20 @@ The purpose of this EDA is to explore how filtering out records based on the cri
 
 _Distribution of patient above and below 18 years old_
 ``` {r, echo = FALSE, warning = FALSE}
-knitr::kable(person.level %>% count(age_flag)) 
+person.level %>% count(age_flag) 
 ```
 
 _Distribution of patient with and without clinic dates after 01/01/2000_
 ``` {r, echo = FALSE, warning = FALSE}
-knitr::kable(person.level %>% count(clinic_drop))
+person.level %>% count(clinic_drop)
 ```
 
 _Distribution of patients with and without valid addresses_
 ``` {r, echo = FALSE, warning = FALSE}
-knitr::kable(person.level %>% count(valid_address))
+person.level %>% count(valid_address)
 ```
 ``` {r, echo = FALSE, warning = FALSE}
-knitr::kable(person.level %>% count(death))
+person.level %>% count(death)
 ```
 
 
@@ -674,7 +665,7 @@ person.level.filtered <- person.level %>% # 5244 patients
 ```
 
 ``` {r, echo = FALSE, warning = FALSE}
-knitr::kable(person.level.filtered %>% count(death))
+person.level.filtered %>% count(death)
 ```
 
 ``` {r, echo = FALSE}
@@ -689,364 +680,6 @@ paste('Number of records:', dim(person.level.filtered)[1])
 print("Patients who are still alive")
 paste('Number of records:', dim(person.level.filtered %>% filter(death == 0))[1])
 ```
-
-
-``` {r}
-# check missingness in the original dataset
-sapply(person.level, function(x) sum(is.na(x)))
-
-```
-
-``` {r}
-# check missingness in the filtered dataset
-sapply(person.level.filtered, function(x) sum(is.na(x)))
-
-```
-
-_Number of Clinics_
-``` {r, echo = FALSE}
-ggplot(person.level, aes(x=no_clinics)) +
-      geom_bar(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.7), labels = percent) +
-      scale_x_continuous(breaks = seq(0,20,1)) +
-      labs(title = "Distribution of Number of Clinic Visits", 
-           y = "Percent", 
-           x = "Number of Visits")
-
-
-ggplot(person.level.filtered, aes(x=no_clinics_2000)) +
-      geom_bar(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.7), labels = percent) +
-      scale_x_continuous(breaks = seq(0,20,1)) +
-      labs(title = "Distribution of Number of Clinic Visits after 01/01/2000", 
-           y = "Percent", 
-           x = "Number of Visits")
-
-```
-
-``` {r, echo = FALSE}
-person.level %>%
-  filter(no_clinics > 1) %>%
-  ggplot(aes(x=no_clinics)) +
-      geom_bar(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.5), labels = percent) +
-      scale_x_continuous(breaks = seq(0,20,1)) +
-      labs(title = "Distribution of Number of Clinic Visits", 
-           y = "Percent", 
-           x = "Number of Visits")
-
-person.level.filtered %>%
-  filter(no_clinics_2000 > 1) %>%
-  ggplot(aes(x=no_clinics_2000)) +
-        geom_bar(aes( y = ..count../sum(..count..))) +
-        scale_y_continuous(limits = c(0,0.5), labels = percent) +
-        scale_x_continuous(breaks = seq(0,20,1)) +
-        labs(title = "Distribution of Number of Clinic Visits after 01/01/2000", 
-             y = "Percent", 
-             x = "Number of Visits")
-
-```
-
-_First Clinic Date_
-``` {r, echo = FALSE}
-ggplot(person.level, aes(x=first_clinic)) +
-      geom_histogram(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.25), labels = percent) +
-      labs(title = "Distribution of First Clinic Visit", 
-           y = "Percent", 
-           x = "Year")
-
-ggplot(person.level.filtered, aes(x=first_clinic_2000)) +
-      geom_histogram(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.25), labels = percent) +
-      labs(title = "Distribution of First Clinic Visit after 01/01/2000", 
-           y = "Percent", 
-           x = "Year")
-```
-
-_Last Clinic Date_
-``` {r, echo = FALSE}
-ggplot(person.level, aes(x=last_clinic)) +
-      geom_histogram(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.25), labels = percent) +
-      labs(title = "Distribution of Last Clinic Visit", 
-           y = "Percent", 
-           x = "Year")
-
-ggplot(person.level.filtered, aes(x=last_clinic_2000)) +
-      geom_histogram(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.25), labels = percent) +
-      labs(title = "Distribution of Last Clinic Visit after 01/01/2000", 
-           y = "Percent", 
-           x = "Year")
-```
-
-_Time between first and last clinic_
-``` {r, echo = FALSE}
-ggplot(person.level, aes(x=date_diff)) +
-      geom_histogram(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.7), labels = percent) +
-      labs(title = "Distribution of Years between first and last visit", 
-           y = "Percent", 
-           x = "years")
-
-ggplot(person.level.filtered, aes(x=date_diff_2000)) +
-      geom_histogram(aes( y = ..count../sum(..count..))) +
-      scale_y_continuous(limits = c(0,0.7), labels = percent) +
-      labs(title = "Distribution of Years between first and last visit, after 01/01/2000", 
-           y = "Percent", 
-           x = "years")
-```
-
-``` {r, echo = FALSE}
-person.level %>%
-  filter(no_clinics > 1) %>%
-  ggplot(aes(x=date_diff)) +
-      geom_histogram(aes( y = ..count../sum(..count..)))+
-      scale_y_continuous(limits = c(0,0.3), labels = percent) +
-      labs(title = "Distribution of Years between first and last visit", 
-           y = "Percent", 
-           x = "years")
-
-person.level.filtered %>%
-  filter(no_clinics_2000 > 1) %>%
-  ggplot(aes(x=date_diff_2000)) +
-        geom_histogram(aes( y = ..count../sum(..count..)))+
-        scale_y_continuous(limits = c(0,0.3), labels = percent) +
-        labs(title = "Distribution of Years between first and last visit, after 01/01/2000", 
-             y = "Percent", 
-             x = "years")
-```
-
-_sex_
-``` {r, echo = FALSE}
-ggplot(person.level, aes(x=as.factor(sex))) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,0.6), breaks = seq(0,0.6,0.1), labels = percent) +
-  labs(title = "Sex", 
-       y = "Percent", 
-       x = "Sex")
-
-
-ggplot(person.level.filtered, aes(x=as.factor(sex))) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,0.6), breaks = seq(0,0.6,0.1), labels = percent) +
-  labs(title = "Sex", 
-       y = "Percent", 
-       x = "Sex")
-```
-
-_age_
-```{r, echo = FALSE}
-person.level %>%
-  filter(death == 0) %>%
-  ggplot(aes(x=as.numeric(age, "years"))) +
-    geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-    scale_y_continuous(limits = c(0,0.1), labels = percent) +
-    scale_x_continuous(limits = c(0,120)) +
-    labs(title = "Age", 
-         y = "count", 
-         x = "years")
-
-person.level.filtered %>%
-  filter(death == 0) %>%
-  ggplot(aes(x=as.numeric(age, "years"))) +
-    geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-    scale_y_continuous(limits = c(0,0.1), labels = percent) +
-    scale_x_continuous(limits = c(0,120)) +
-    labs(title = "Age", 
-         y = "count", 
-         x = "years")
-
-
-```
-
-_death_
-```{r, echo = FALSE}
-ggplot(person.level, aes(x=as.factor(death))) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,1), labels = percent) +
-  labs(title = "death", 
-       y = "Percent", 
-       x = "death")
-
-ggplot(person.level.filtered, aes(x=as.factor(death))) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,1), labels = percent) +
-  labs(title = "death", 
-       y = "Percent", 
-       x = "death")
-```
-
-_age at death_
-```{r, echo = FALSE}
-ggplot(person.level, aes(x=as.numeric(age_death, "years"))) +
-  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-  scale_y_continuous(limits = c(0,0.1), labels = percent) +
-  labs(title = "age at death", 
-       y = "count", 
-       x = "age at death")
-
-ggplot(person.level.filtered, aes(x=as.numeric(age_death, "years"))) +
-  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-  scale_y_continuous(limits = c(0,0.1), labels = percent) +
-  labs(title = "age at death", 
-       y = "count", 
-       x = "age at death")
-```
-
-
-_Diagnoses_
-``` {r echo = FALSE}
-ggplot(person.level, aes(x=no_dx)) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,1), labels = percent) +
-  scale_x_continuous(breaks = seq(0,10,1)) +
-  labs(title = "Number of Diangoses per person", 
-       y = "count", 
-       x = "Number of Diagnoses")
-
-ggplot(person.level.filtered, aes(x=no_dx)) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,1), labels = percent) +
-  scale_x_continuous(breaks = seq(0,10,1)) +
-  labs(title = "Number of Diangoses per person", 
-       y = "count", 
-       x = "Number of Diagnoses")
-```
-
-``` {r echo = FALSE}
-print('number of people with no diagnosis - original dataset:')
-length(person.level$achd_id[person.level$no_dx == 0])
-
-print('number of people with no diagnosis - filtered dataset:')
-length(person.level.filtered$achd_id[person.level.filtered$no_dx == 0])
-```
-
-``` {r, echo = FALSE}
-# created a dataset with only the disagnoses
-dx.only <- person.level %>%
-  select(all_of(EPCC_codes)) %>%
-  mutate_all(as.character) %>%
-  mutate_all(as.numeric)
-
-#re-add the diagnosis labels
-dx.only <- do.call(apply_labels, c(list(data = dx.only), EPCC_to_names))
-
-# created a dataset with only the disagnoses - from the filtered data
-dx.only.filtered <- person.level.filtered %>%
-  select(all_of(EPCC_codes)) %>%
-  mutate_all(as.character) %>%
-  mutate_all(as.numeric)
-
-#re-add the diagnosis labels
-dx.only.filtered <- do.call(apply_labels, c(list(data = dx.only.filtered), EPCC_to_names))
-```
-
-``` {r, echo = FALSE}
-# The frequency each diagnosis appears in the dataset
-dx.count <- dx.only %>%
-            summarise_all(sum, na.rm = TRUE) %>%
-            t() 
-
-# Convert to data frame and clean
-dx.count <- as.data.frame(dx.count)
-dx.count$dx_name <- dx_names
-
-# plot the frequency of each diagnosis
-ggplot(dx.count, aes(x = dx_name, y=V1)) + 
-geom_bar(stat="identity",) +
-theme(axis.text.x = element_text(angle = 90)) +
-labs(title = "Frequecy of each diagnosis - full dataset", 
-   y = "count",
-   x = "")
-```
-
-
-``` {r, echo = FALSE}
-# The frequency each diagnosis appears in the dataset - from the filtered dataset
-dx.count.filtered <- dx.only.filtered %>%
-            summarise_all(sum, na.rm = TRUE) %>%
-            t() 
-
-# Convert to data frame and clean
-dx.count.filtered <- as.data.frame(dx.count.filtered)
-dx.count.filtered$dx_name <- dx_names
-
-# plot the frequency of each diagnosis
-ggplot(dx.count.filtered, aes(x = dx_name, y=V1)) + 
-  geom_bar(stat="identity") +
-  theme(axis.text.x = element_text(angle = 90)) +
-  labs(title = "Frequecy of each diagnosis - filtered dataset", 
-     y = "count",
-     x = "")
-```
-
-_Disease Severity_
-``` {r}
-ggplot(person.level, aes(x=bethesda_code)) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,1), labels = percent) +
-  labs(title = "disease severity", 
-       y = "Percent", 
-       x = "death")
-
-ggplot(person.level.filtered, aes(x=bethesda_code)) +
-  geom_bar(aes( y = ..count../sum(..count..)))+
-  scale_y_continuous(limits = c(0,1), labels = percent) +
-  labs(title = "disease severity", 
-       y = "Percent", 
-       x = "death")
-```
-
-
-
-_Counting the ACHD population in each area_
-``` {r}
-# count the number achd patients in each SA2 area
-sa2.count <- person.level.filtered %>% count(sa2) %>%
-                        rename("ACHD_count" = n)
-
-# count the number achd patients in each SA3 area
-sa3.count <- person.level.filtered %>% count(sa3) %>%
-                        rename("ACHD_count" = n)
-
-# count the number achd patients in each SA4 area
-sa4.count <- person.level.filtered %>% count(sa4) %>%
-                        rename("ACHD_count" = n)
-```
-
-
-``` {r}
-sa2.count %>% filter(!is.na(sa2)) %>%
-ggplot(aes(x=ACHD_count)) +
-  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-  scale_y_continuous(limits = c(0,0.25), labels = percent) +
-  scale_x_continuous(breaks = seq(0,60,5)) +
-  labs(title = "Population per sa2 area", 
-       y = "percent", 
-       x = "Population per sa2 area")
-
-sa3.count %>% filter(!is.na(sa3)) %>%
-ggplot(aes(x=ACHD_count)) +
-  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-  scale_y_continuous(limits = c(0,0.25), labels = percent) +
-  scale_x_continuous(breaks = seq(0,500,50)) +
-  labs(title = "Population per sa3 area", 
-       y = "percent", 
-       x = "Population per sa3 area")
-
-sa4.count %>% filter(!is.na(sa4)) %>%
-ggplot(aes(x=ACHD_count)) +
-  geom_histogram(aes( y = ..count../sum(..count..)), bins = 50)+
-  scale_y_continuous(limits = c(0,0.25), labels = percent) +
-  scale_x_continuous(breaks = seq(0,500,50)) +
-  labs(title = "Population per sa4 area", 
-       y = "percent", 
-       x = "Population per sa4 area")
-
-```
-
 _Saving the data_
 Will not run by default to not overwrite data accidentally, change eval = if you need to rewrite the patient data
 ``` {r, eval = TRUE}
@@ -1057,7 +690,7 @@ Will not run by default to not overwrite data accidentally, change eval = if you
 master_code_sheet <- person.level.filtered %>% select(achd_id, dob, sex, suburb, postcode, state)
 # write the master code sheet to an excel spreadsheet
 write.csv(x = master_code_sheet,
-           file = paste(ACHD_path, "RPAH_master_code_sheet", Sys.Date(), ".csv", sep=""))
+           file = paste(ACHD_path, "master_code_sheet/RPAH_master_code_sheet_", Sys.Date(), ".csv", sep=""))
 
 #Save the analysis data set
 analysis_dataset <- person.level.filtered %>% select(-dob, -suburb, -postcode, -state,
@@ -1102,10 +735,6 @@ paste("ltf all: ", ( analysis_dataset %>% filter(ltf_3 == 1) %>% nrow() ) / ( an
 paste("ltf simple: ", ( analysis_dataset %>% filter(bethesda_code == 1) %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
 paste("ltf moderate: ", ( analysis_dataset %>% filter(bethesda_code == 2) %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
 paste("ltf complex: ", ( analysis_dataset %>% filter(bethesda_code == 3) %>% filter(ltf_3 == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
-```
-
-``` {r}
-hist(as.numeric(analysis_dataset$gap_2000, 'years'))
 ```
 
 

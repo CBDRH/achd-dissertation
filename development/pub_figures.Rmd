@@ -63,7 +63,7 @@ filter.data <- function(data,
             filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') >= sb.last.clinic[1]) %>%
             filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') <= sb.last.clinic[2]) %>%
     
-            {if( !(sb.dates[1] == "2000-01-01" & sb.dates[2] == "2020-12-31") )
+            {if( !(sb.dates[1] == "2000-01-01" & sb.dates[2] == "2021-07-01") )
               
               mutate(., clinics_2000 = map(clinics_2000, ~ .x %>%
                                         mutate(
@@ -81,11 +81,11 @@ filter.data <- function(data,
 ```
 
 ``` {r}
-sb.mortality <- c(0,1)
+sb.mortality <- c(0)
 sb.sex <- c(1,2,4)
 sb.bethesda <- c(1,2,3,4)
 sb.age <- c(11,111)
-sb.dates <- c("2000-01-01", "2022-12-31")
+sb.dates <- c("2000-01-01", "2022-07-01")
 sb.last.clinic <- c(0, 23)
 
 achd.filtered <- filter.data(achd,
@@ -408,8 +408,12 @@ fig.4
 
 ``` {r}
 # Driectory for plots
+dir.create(here("pub_figures"))
+# Driectory for plots
 dir.create(here("pub_figures", Sys.Date()))
-# Save the plots - age_plot sex_plot nclinic_plot ltf_plot ndx_plot fig_1 dx_plot
+```
+
+``` {r}
 
 # Figure 1 components, as vectors
 ggsave(here("pub_figures", Sys.Date(), paste("fig1a_age_", Sys.Date(), ".eps", sep = "")), 
