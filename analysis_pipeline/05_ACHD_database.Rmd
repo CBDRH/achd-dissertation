@@ -41,12 +41,13 @@ _ADMIN_
 ADMIN <- read_csv(paste(ACHD_path, 'Table_exports_2022/ADMIN.csv', sep="")) %>%
 #         ------------Clean up the data-------------------------  
           # select columns
-          select(person_id, adm_sex, adm_date_of_birth,                                   
+          select(person_id, adm_sex, adm_date_of_birth, adm_street_name_type_and_suffix,
                  adm_suburb_locality, adm_postcode, adm_state_abbreviation) %>%
           # rename columns
           rename('achd_id' = person_id,                                                   
                  'sex' = adm_sex,
                  'dob' = adm_date_of_birth,
+                 'street' = adm_street_name_type_and_suffix,
                  'suburb' = adm_suburb_locality,
                  'postcode' = adm_postcode,
                  'state' = adm_state_abbreviation) %>%
@@ -127,7 +128,7 @@ ADMIN <- ADMIN %>%
                   suburb = replace(suburb, achd_id == 78, 'ROBERTSON'),
                   postcode = replace(postcode, achd_id == 1583, 2193),
                   suburb = replace(suburb, achd_id == 2695, 'SYLVANIA'),
-                  suburb = replace(suburb, achd_id == 2639, 'WAVERLY'),
+                  suburb = replace(suburb, achd_id == 2639, 'WAVERLEY'),
                   valid_address = replace(valid_address, achd_id == 2302, 0),
                   postcode = replace(postcode, achd_id == 2019, 2478),
                   postcode = replace(postcode, achd_id == 2871, 2040),
@@ -354,7 +355,88 @@ ADMIN <- ADMIN %>%
                 )
 ```
 
+Second round of address cleaning after 2022 data update
 
+``` {r}
+ADMIN <- ADMIN %>%
+                mutate(
+                  state = replace(state, achd_id == 5542, "QLD"),
+                  valid_address = replace(valid_address, achd_id == 5542, 0),
+                  state = replace(state, achd_id == 5425, "Vic"),
+                  valid_address = replace(valid_address, achd_id == 5425, 0),
+                  postcode = replace(postcode, achd_id == 2962, 2603),
+                  suburb = replace(suburb, achd_id == 825, "LUE"),
+                  postcode = replace(postcode, achd_id == 5697, 2822),
+                  postcode = replace(postcode, achd_id == 5541, 2795),
+                  suburb = replace(suburb, achd_id == 5443, "HAWKESBURY HEIGHTS"),
+                  suburb = replace(suburb, achd_id == 1838, "RIVERSTONE"),
+                  suburb = replace(suburb, achd_id == 2909, "CLAREMONT MEADOWS"),
+                  suburb = replace(suburb, achd_id == 4261, "OAKS ESTATE"),
+                  postcode = replace(postcode, achd_id == 4948, 2913),
+                  postcode = replace(postcode, achd_id == 1771, 2612),
+                  suburb = replace(suburb, achd_id == 4667, "STIRLING"),
+                  suburb = replace(suburb, achd_id == 5139, "GOULBURN"),
+                  postcode = replace(postcode, achd_id == 5683, 2528),
+                  postcode = replace(postcode, achd_id == 5684, 2250),
+                  suburb = replace(suburb, achd_id == 5573, "ST GEORGES BASIN"),
+                  suburb = replace(suburb, achd_id == 5641, "MANYANA"),
+                  suburb = replace(suburb, achd_id == 5574, "SHOALHAVEN HEADS"),
+                  suburb = replace(suburb, achd_id == 5642, "GERRINGONG"),
+                  postcode = replace(postcode, achd_id == 4001, 2528),
+                  suburb = replace(suburb, achd_id == 4001, "MT WARRIGAL"),
+                  suburb = replace(suburb, achd_id == 5640, "FIGTREE"),
+                  suburb = replace(suburb, achd_id == 1057, "WARRAWONG"),
+                  postcode = replace(postcode, achd_id == 4199, 2650),
+                  suburb = replace(suburb, achd_id == 4427, "FORSTER"),
+                  suburb = replace(suburb, achd_id == 4599, "KURRI KURRI"),
+                  postcode = replace(postcode, achd_id == 3131, 2774),
+                  suburb = replace(suburb, achd_id == 4730, "BLUE HAVEN"),
+                  postcode = replace(postcode, achd_id == 223, 2261),
+                  postcode = replace(postcode, achd_id == 553, 2042),
+                  postcode = replace(postcode, achd_id == 3997, 2208),
+                  postcode = replace(postcode, achd_id == 3123, 2232),
+                  suburb = replace(suburb, achd_id == 5434, "PENSHURST"),
+                  suburb = replace(suburb, achd_id == 2887, "BELFIELD"),
+                  suburb = replace(suburb, achd_id == 5700, "GREENACRE"),
+                  suburb = replace(suburb, achd_id == 5385, "HOLSWORTHY"),
+                  suburb = replace(suburb, achd_id == 4270, "GUILDFORD WEST"),
+                  postcode = replace(postcode, achd_id == 4322, 2765),
+                  postcode = replace(postcode, achd_id == 5424, 2141),
+                  postcode = replace(postcode, achd_id == 4637, 2131),
+                  postcode = replace(postcode, achd_id == 4266, 2130),
+                  suburb = replace(suburb, achd_id == 5685, "PENNANT HILLS"),
+                  suburb = replace(suburb, achd_id == 5682, "DUNDAS VALLEY"),
+                  suburb = replace(suburb, achd_id == 5474, "HUNTERS HILL"),
+                  postcode = replace(postcode, achd_id == 3104, 2100),
+                  postcode = replace(postcode, achd_id == 1212, 2090),
+                  valid_address = replace(valid_address, achd_id == 1921, 0),
+                  suburb = replace(suburb, achd_id == 5705, "KILLARNEY HEIGHTS"),
+                  suburb = replace(suburb, achd_id == 5534, "LONGUEVILLE"),
+                  suburb = replace(suburb, achd_id == 4575, "LANE COVE"),
+                  suburb = replace(suburb, achd_id == 5421, "WOLLSTONECRAFT"),
+                  postcode = replace(postcode, achd_id == 5676, 2006),
+                  postcode = replace(postcode, achd_id == 4660, 2006),
+                  postcode = replace(postcode, achd_id == 4502, 2006),
+                  suburb = replace(suburb, achd_id == 4502, "CAMPERDOWN"),
+                  postcode = replace(postcode, achd_id == 4420, 2044),
+                  suburb = replace(suburb, achd_id == 5274, "STANMORE"),
+                  postcode = replace(postcode, achd_id == 1704, 2046),
+                  postcode = replace(postcode, achd_id == 5039, 2260),
+                  suburb = replace(suburb, achd_id == 4917, "GLEBE"),
+                  postcode = replace(postcode, achd_id == 3802, 2037),
+                  postcode = replace(postcode, achd_id == 5638, 2032),
+                  postcode = replace(postcode, achd_id == 3194, 2024),
+                  suburb = replace(suburb, achd_id == 3194, "WAVERLEY"),
+                  postcode = replace(postcode, achd_id == 4932, 2042),
+                  postcode = replace(postcode, achd_id == 4788, 2017),
+                  postcode = replace(postcode, achd_id == 1559, 2018),
+                  postcode = replace(postcode, achd_id == 3494, 2017),
+                  postcode = replace(postcode, achd_id == 2635, 2010),
+                  state = replace(state, achd_id == 5313, "NT"),
+                  valid_address = replace(valid_address, achd_id == 5313, 0),
+                )
+
+```
 
 _MAIN_
 ``` {r}
@@ -597,15 +679,15 @@ person.level <- person.level %>%
 ```
 
 __Address Cleaning List__
-Final version of this document should have nothing in it, address cleaning performed above was used with the cleaning list dated 08/10/2020
+Final version of this document should have nothing in it, address cleaning performed above was used with the cleaning lists dated 08/10/2020 and 10/08/2022
 ``` {r}
 address_cleaning_list <- person.level %>% filter(valid_address == 1) %>%
                                            filter(is.na(sa2)) %>%
-                                           select(achd_id,postcode, suburb, state,)
+                                           select(achd_id, street, postcode, suburb, state,)
 
 address_cleaning_list
 
-#write.csv(address_cleaning_list, paste("Z:/CURRENT_STUDIES/2020_achd_map/DATA/", 'output/test_', Sys.Date(), '.csv', sep=""))
+#write.csv(address_cleaning_list, paste(ACHD_path, 'output/address_cleaning_list_', Sys.Date(), '.csv', sep=""))
 ```
 
 __Cleaning Data Types__
@@ -660,8 +742,7 @@ Create a second dataset that filters out the above
 person.level.filtered <- person.level %>% # 5244 patients
                             filter(age_flag == 1) %>% # 124 remove, 5120 remain
                             filter(clinic_drop == 0) %>% # 531 removed, 4589 remain
-                            filter(valid_address == 1) # 1101 removed, 3488 remain
-
+                            filter(valid_address == 1) # 1105 removed, 3484 remain
 ```
 
 ``` {r, echo = FALSE, warning = FALSE}

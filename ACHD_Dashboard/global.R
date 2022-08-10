@@ -16,7 +16,7 @@ library(tippy)
 library(shinyalert)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- 'Z:CURRENT_STUDIES/2020_achd_map/DATA/'
+pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/'
 
 ################################## LOAD DATA ############################################
 
