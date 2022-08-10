@@ -16,11 +16,7 @@ Check how removing missing data affects the demographics.
 knitr::opts_chunk$set(echo = TRUE)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-<<<<<<< HEAD
 ACHD_path <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/ACHD_TABLES_2022/'
-=======
-ACHD_path <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
->>>>>>> bafaf96063f0261f2a7b074f3def18c4be48b417
 
 library(tidyverse)
 library(lubridate)
@@ -59,7 +55,7 @@ ADMIN <- read_csv(paste(ACHD_path, 'ADMIN.csv', sep="")) %>%
           # Convert clinic dates to Date format
           mutate_at("dob", as.Date, format='%d/%m/%Y') %>% 
           # Calculate age on 01 Jan 2020
-          mutate(age = as.period(dob %--% as.Date("01/01/2020", format='%d/%m/%Y'))) %>%
+          mutate(age = as.period(dob %--% as.Date("01/07/2022", format='%d/%m/%Y'))) %>%
           # Flag for ages greater than 18 years old
           mutate(age_flag = ifelse(as.numeric(age, "years") >= 18, 1, 0)) %>%
           # Remove whitespace from suburb name
@@ -659,6 +655,10 @@ _Distribution of patients with and without valid addresses_
 ``` {r, echo = FALSE, warning = FALSE}
 knitr::kable(person.level %>% count(valid_address))
 ```
+``` {r, echo = FALSE, warning = FALSE}
+knitr::kable(person.level %>% count(death))
+```
+
 
 Create a second dataset that filters out the above  
     - Patients 18 or over (`age_flag == 1`)  
@@ -666,13 +666,16 @@ Create a second dataset that filters out the above
     - Patients with clinic visits after 01/01/2020 (`clinic_drop == 0`)
     
 ``` {r}
-person.level.filtered <- person.level %>%
-                            filter(age_flag == 1 &
-                                   valid_address == 1 &
-                                   clinic_drop == 0)
+person.level.filtered <- person.level %>% # 5244 patients
+                            filter(age_flag == 1) %>% # 124 remove, 5120 remain
+                            filter(clinic_drop == 0) %>% # 531 removed, 4589 remain
+                            filter(valid_address == 1) # 1101 removed, 3488 remain
 
 ```
 
+``` {r, echo = FALSE, warning = FALSE}
+knitr::kable(person.level.filtered %>% count(death))
+```
 
 ``` {r, echo = FALSE}
 print("Dimensions of the original dataset")
@@ -682,6 +685,9 @@ paste('Number of records:', dim(person.level)[1])
 print("Dimensions of the filtered dataset")
 paste('Number of variables:', dim(person.level.filtered)[2])
 paste('Number of records:', dim(person.level.filtered)[1])
+
+print("Patients who are still alive")
+paste('Number of records:', dim(person.level.filtered %>% filter(death == 0))[1])
 ```
 
 
@@ -1066,11 +1072,14 @@ analysis_dataset %>% select(-clinics_2000) %>%
 
 ``` {r}
 # Some summary numbers for publication
+paste("Alive: ", ( analysis_dataset %>% filter(death == 0) %>% nrow() ) )
+
 paste("age mean: ", mean(as.numeric(analysis_dataset$age, 'years')))
 paste("age sd: ", sd(as.numeric(analysis_dataset$age, 'years')))
 
-paste("female: ", ( analysis_dataset %>% filter(sex == 2) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
-paste("neither m or f: ", ( analysis_dataset %>% filter(sex == 4) %>% nrow() ))
+
+paste("female p: ", ( analysis_dataset %>% filter(sex == 2) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
+paste("female n: ", ( analysis_dataset %>% filter(sex == 2) %>% nrow() ))
 
 paste("Bicuspid: ", ( analysis_dataset %>% filter(`09.15.22` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )
 paste("VSD: ", ( analysis_dataset %>% filter(`07.10.00` == 1) %>% nrow() ) / ( analysis_dataset %>% nrow() ) )

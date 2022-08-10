@@ -25,7 +25,7 @@ library(wesanderson)
 
 ``` {r message=FALSE, warning=FALSE, include=FALSE}
 # Path to ACHD database data (note: only accessible at RPAH)
-pt_data <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
+pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/'
 
 # Path to the study's data folder (note: only accessible at RPAH)
 app_data <- here("ACHD_Dashboard", "data")
