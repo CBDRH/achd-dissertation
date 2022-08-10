@@ -22,11 +22,8 @@ library(tableHTML)
 library(here)
 
 # Path to ACHD database data (note: only accessible at RPAH)
-<<<<<<< HEAD
 pt_data <- 'Z:CURRENT_STUDIES/2020_achd_map/DATA/'
-=======
-pt_data <- '/Users/calumnicholson/script/r-projects/Masters/achd-data/'
->>>>>>> bafaf96063f0261f2a7b074f3def18c4be48b417
+
 
 ################################## LOAD DATA ############################################
 
@@ -408,7 +405,7 @@ server <- function(input, output) {
             
             # Filtering by the selected date range. This is quite a slow process and will only run is the date range 
             # is altered from the default, which is all-inclusive
-            {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2020-12-31") )
+            {if ( !(input$sb.dates[1] == "2000-01-01" & input$sb.dates[2] == "2022-12-31") )
                 mutate(., 
                        clinics_2000 = map(clinics_2000, ~ .x %>%
                                                  mutate(clinic_in_period = 
@@ -469,17 +466,6 @@ server <- function(input, output) {
     })
     
 ############################# SIDEBAR #################################
-    #-------------------- UI elements for Report Download--------------#
-    # PDF/HTML Selector
-    output$download.type <- renderUI ({
-      checkboxGroupInput("sb.bethesda", "Disease severity",
-                         choices = c('Simple' = 1,
-                                     'Moderate' = 2,
-                                     'Complex' = 3,
-                                     'Unknown' = 4),
-                         selected = c(1, 2, 3, 4))
-    })
-    
     #-------------------- UI elements for Global Fitlers--------------#
     # Filter by Disease Severity
     output$out.bethesda <- renderUI ({
@@ -520,8 +506,8 @@ server <- function(input, output) {
     # Filter by Time Period
     output$out.dates <- renderUI ({
         dateRangeInput("sb.dates", "Select a time period:",
-                       start = "2000-01-01", end = "2020-12-31",
-                       min = "2000-01-01", max = "2020-12-31",
+                       start = "2000-01-01", end = "2022-12-31",
+                       min = "2000-01-01", max = "2022-12-31",
                        format = "dd/mm/yyyy")
     })
     
@@ -529,13 +515,13 @@ server <- function(input, output) {
     output$out.last.clinic <- renderUI ({ 
         sliderInput('sb.last.clinic', 'Time since last clinic visit',
                     min = 0,
-                    max = 21,
-                    value = c(0,21),
+                    max = 23,
+                    value = c(0,23),
                     round = TRUE)
     })
         
     #-------------------- Resetting the Global Filters--------------#
-    # When the rest button is clicks turn the following to default
+    # When the rest button is clicked turn the following to default
     observeEvent(input$sb.reset, {
         # Disease Severity
         output$out.bethesda <- renderUI ({
@@ -572,16 +558,16 @@ server <- function(input, output) {
         # Time Period
         output$out.dates <- renderUI ({
             dateRangeInput("sb.dates", "Select a time period:",
-                           start = "2000-01-01", end = "2020-12-31",
-                           min = "2000-01-01", max = "2020-12-31",
+                           start = "2000-01-01", end = "2022-12-31",
+                           min = "2000-01-01", max = "2022-12-31",
                            format = "dd/mm/yyyy")
         })
         # Time Since Last Visit
         output$out.last.clinic<- renderUI ({ 
             sliderInput('sb.last.clinic', 'Time since last clinic visit',
                         min = 0,
-                        max = 21,
-                        value = c(0,21),
+                        max = 23,
+                        value = c(0,23),
                         round = TRUE)
         })
     })
