@@ -398,13 +398,14 @@ This data contains the distance between each SA2 area in australia and each hosp
 htt <- readRDS(file = "./output/htt_nsw.rds") %>%
 #         ------------Clean up the data-------------------------  
           # select columns, sa2 code and ACHD locations          
-          select(SA2_5DIGIT, `646`, `408`, `152`, `683`, `737`, `979`)%>%
+          select(SA2_5DIGIT, `646`, `408`, `152`, `683`, `755`, `737`, `979`)%>%
           # rename locations to something understandable
           dplyr::rename(
                  "time_to_orange" = `646`,
                  "time_to_newcastle" = `408`,
                  "time_to_canberra" = `152`,
                  "time_to_port" = `683`,
+                 "time_to_nowra" = `755`,
                  "time_to_rpa" = `737`,
                  "time_to_westmead" = `979`) %>%
           # calculate the shortest travel time to an achd clinic
