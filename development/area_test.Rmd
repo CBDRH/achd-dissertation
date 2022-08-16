@@ -125,7 +125,7 @@ area.data <- left_join(sa2.TB, area.achd, by = c("SA2_NAME" = 'sa2')) %>%
 ```
 
 ``` {r}
-area.data.public <- readRDS(file = paste(pt_data, 'output/area_achd.rds', sep="")) %>%
+area.data.public <- readRDS(file = paste(app_data, '/area_achd.rds', sep="")) %>%
                         left_join(sa2.TB, by = c("SA2_NAME")) %>%
                         mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
                         mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
@@ -146,7 +146,11 @@ area.data %>%
 area.data.public %>%
   filter(as.numeric(shortest_time, "hours") <= 1) %>%
   summarise(hr_drive = sum(ACHD_count))
+
+
 ```
+
+
 
 
 
