@@ -132,6 +132,12 @@ area.data.public <- readRDS(file = paste(pt_data, 'output/area_achd.rds', sep=""
 ```
 
 ``` {r}
+sa2.TB %>% filter(as.numeric(shortest_time, "hours") <= 1) %>% nrow()
+area.data %>% summarise(sum = sum(ACHD_count))
+area.data.public %>% summarise(sum = sum(ACHD_count))
+```
+
+``` {r}
 area.data %>%
   filter(as.numeric(shortest_time, "hours") <= 1) %>%
   summarise(hr_drive = sum(ACHD_count))
@@ -140,11 +146,7 @@ area.data %>%
 area.data.public %>%
   filter(as.numeric(shortest_time, "hours") <= 1) %>%
   summarise(hr_drive = sum(ACHD_count))
-
-
 ```
-
-
 
 
 
