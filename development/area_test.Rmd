@@ -1,0 +1,151 @@
+---
+title: "area_achd_testing"
+output: html_document
+date: "2022-08-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(shiny)
+library(rgdal)
+library(sp)
+library(tidyverse)
+library(leaflet)
+library(leaflet.extras)
+library(ggplot2)
+library(ggpubr)
+library(sjmisc)
+library(here)
+library(lubridate)
+library(viridis)
+library(wesanderson)
+```
+
+``` {r message=FALSE, warning=FALSE, include=FALSE}
+# Path to ACHD database data (note: only accessible at RPAH)
+pt_data <- 'Z:/CURRENT_STUDIES/2020_achd_map/DATA/'
+
+# Path to the study's data folder (note: only accessible at RPAH)
+app_data <- here("ACHD_Dashboard", "data")
+
+#import ACHD data
+achd <- readRDS(file = paste(pt_data, 'output/rpah_analysis_dataset.rds', sep=""))
+              
+
+#import DX coding
+dx_codes <- read.csv(file = paste(app_data, '/ACHD_EPCC_coding.csv', sep=""), fileEncoding="UTF-8-BOM") %>% 
+            filter(!(Variable == 'adm_AbsentPA' | Variable == 'PA' | Variable == "achd_id")) %>%
+            select(!c(ACHD_Database_name, check., Variable))
+
+#import Census data
+sa2.TB <- readRDS(file = paste(app_data, '/sa2_demographics.rds', sep="")) %>%
+                  mutate(IRSD = ordered(IRSD, c(1,2,3,4,5,6,7,8,9,10)),
+                         IRSAD = ordered(IRSAD, c(1,2,3,4,5,6,7,8,9,10)))
+
+achd_ids <- c(152, 408, 646, 683, 737, 979)
+```
+
+```{r}
+filter.data <- function(data,
+                          sb.mortality,
+                          sb.sex,
+                          sb.bethesda,
+                          sb.age,
+                          sb.dates,
+                          sb.last.clinic) 
+       {
+        data %>% 
+            filter(death %in% sb.mortality) %>%
+            filter(is.na(sex) | sex %in% sb.sex) %>%
+            filter(bethesda_code %in% sb.bethesda) %>%
+            filter(as.numeric(age, 'years') >= sb.age[1]) %>%
+            filter(as.numeric(age, 'years') <= sb.age[2]) %>%
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') >= sb.last.clinic[1]) %>%
+            filter(is.na(gap_2000) | as.numeric(gap_2000, 'years') <= sb.last.clinic[2]) %>%
+    
+            {if( !(sb.dates[1] == "2000-01-01" & sb.dates[2] == "2021-07-01") )
+              
+              mutate(., clinics_2000 = map(clinics_2000, ~ .x %>%
+                                        mutate(
+                                          clinic_in_period = 
+                                            sapply(.$clinic_date, 
+                                                   function(x) x %within% (as.Date(sb.dates[1])
+                                                                          %--% 
+                                                                          as.Date(sb.dates[2]))))),
+                   in_time_period = map_dbl(map(clinics_2000, ~ .$clinic_in_period), any)
+                   ) %>%
+              filter(in_time_period == TRUE)
+              
+              else . }
+       }
+```
+
+``` {r}
+sb.mortality <- c(0)
+sb.sex <- c(1,2,4)
+sb.bethesda <- c(1,2,3,4)
+sb.age <- c(11,111)
+sb.dates <- c("2000-01-01", "2022-07-01")
+sb.last.clinic <- c(0, 23)
+
+achd.filtered <- filter.data(achd,
+                             sb.mortality,
+                             sb.sex,
+                             sb.bethesda,
+                             sb.age,
+                             sb.dates,
+                             sb.last.clinic)
+                
+```
+
+``` {r}
+area.achd <- achd.filtered %>%
+              group_by(sa2, gcc) %>%
+              dplyr::summarise(ACHD_count = n(), 
+                        beth_1 = sum(bethesda_code == 1),
+                        beth_2 = sum(bethesda_code == 2), 
+                        beth_3 = sum(bethesda_code == 3), 
+                        beth_4 = sum(bethesda_code == 4),
+                        ltf_3 = sum(ltf_3),
+                        ltf_4 = sum(ltf_4),
+                        ltf_5 = sum(ltf_5))
+
+area.dx <- achd %>%
+            mutate_at(as.character(dx_codes[['EPCC_Code']]), as.character) %>% 
+            mutate_at(as.character(dx_codes[['EPCC_Code']]), as.numeric) %>%
+            group_by(sa2) %>% 
+            dplyr::summarise_at(as.character(dx_codes[['EPCC_Code']]), sum, na.rm = TRUE)
+
+
+area.data <- left_join(sa2.TB, area.achd, by = c("SA2_NAME" = 'sa2')) %>% 
+             left_join(area.dx, by = c("SA2_NAME" = 'sa2')) %>%
+                mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
+                mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+```
+
+``` {r}
+area.data.public <- readRDS(file = paste(pt_data, 'output/area_achd.rds', sep="")) %>%
+                        left_join(sa2.TB, by = c("SA2_NAME")) %>%
+                        mutate_at(as.character(dx_codes[['EPCC_Code']]), function(x) replace(x, is.na(x), 0)) %>%
+                        mutate_at(c('ACHD_count', 'beth_1', 'beth_2', 'beth_3', 'beth_4'), function(x) replace(x, is.na(x), 0))
+```
+
+``` {r}
+area.data %>%
+  filter(as.numeric(shortest_time, "hours") <= 1) %>%
+  summarise(hr_drive = sum(ACHD_count))
+
+
+area.data.public %>%
+  filter(as.numeric(shortest_time, "hours") <= 1) %>%
+  summarise(hr_drive = sum(ACHD_count))
+
+
+```
+
+
+
+
+
+
