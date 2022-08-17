@@ -34,5 +34,5 @@ vignettes/*.pdf
 .DS_Store
 #folder to ignore
 ./analysis_pipeline/output/
-ACHD_Dashboard/data
+./ACHD_Dashboard/data/
 pub_figures
