@@ -145,7 +145,7 @@ function(input, output) {
                                                 ltf = as.character(),
                                                 stringsAsFactors = FALSE)
     #For tracking the ACHD clinic IDs selected
-    drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+    drive.values$new_achd_ids <- c(646, 408, 152, 683, 737, 979, 755)
     #For adding new areas for report summary
     drive.values$area.report.list <- list()
     #For the area level data
@@ -268,7 +268,7 @@ function(input, output) {
         })
         
         # Reset the achd clinic ids to the original clinics
-        drive.values$new_achd_ids <- c(646, 755, 152, 683, 737, 979)
+        drive.values$new_achd_ids <- c(646, 408, 152, 683, 737, 979, 755)
         
         # Reset the area data
         drive.values$area_data <- drive.area.achd()
@@ -644,7 +644,7 @@ function(input, output) {
                 h2(HTML(paste("Area Focus", icon('map')))),
                 hr(),
                     div(style="display:inline-block",actionButton('area.button', 'Add to report and close')),
-                    div(style="display:inline-block",actionButton("area.reset", "Cancel")),
+                    div(style="display:inline-block",actionButton("area.reset", "Reset")),
                     HTML(paste(
                         "
             <br><br>
