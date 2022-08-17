@@ -137,7 +137,7 @@ clinic.compare.new <- data.frame(
                                                                              na.rm = TRUE))
                       ) %>% mutate(
                         hr_p = no_pt / sum(area.achd$ACHD_count), # Percentage of patients within 1 hour
-                        ltf_p = ltf_no / sum(area.achd$ACHD_count) # Perc of LTF patients within 1 hour
+                        ltf_p = ltf_no / sum(area.achd$ltf_3) # Perc of LTF patients within 1 hour
                       ) %>%
                       select(no_pt, hr_p, ltf_no, ltf_p, avg_drive, long_drive) # Put the columns in the right order
 
