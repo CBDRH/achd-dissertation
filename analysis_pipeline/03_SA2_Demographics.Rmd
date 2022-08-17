@@ -410,7 +410,7 @@ htt <- readRDS(file = "./output/htt_nsw.rds") %>%
                  "time_to_westmead" = `979`) %>%
           # calculate the shortest travel time to an achd clinic
           mutate(shortest_time = pmin(time_to_orange,time_to_newcastle,time_to_canberra,
-                                     time_to_port,time_to_rpa,time_to_westmead))
+                                     time_to_port,time_to_nowra,time_to_rpa,time_to_westmead))
 
 ```
 
